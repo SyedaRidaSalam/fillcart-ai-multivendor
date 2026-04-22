@@ -16,6 +16,7 @@ export async function POST(req) {
     return NextResponse.json({ error: "Missing secret" }, { status: 500 });
   }
 
+  // 1. Webhook Headers extraction
   const headerList = await headers();
   const svix_id = headerList.get("svix-id");
   const svix_timestamp = headerList.get("svix-timestamp");
@@ -25,6 +26,7 @@ export async function POST(req) {
     return new Response("Error: Missing svix headers", { status: 400 });
   }
 
+  // 2. Parse and Verify Payload
   const payload = await req.json();
   const body = JSON.stringify(payload);
   const wh = new Webhook(WEBHOOK_SECRET);
@@ -42,60 +44,68 @@ export async function POST(req) {
   }
 
   const eventType = evt.type;
-  console.log(`Webhook received: ${eventType}`);
+  console.log(`Webhook Event Received: ${eventType}`);
 
-  // ✅ USER ID EXTRACTION (Keep it same)
+  // 3. User ID Extraction (Strict check for csub_ IDs)
   const userId = 
     evt.data.payer?.user_id || 
     evt.data.user_id || 
     (evt.data.object ? evt.data.object.user_id : null);
 
   if (!userId || userId.startsWith("csub_")) {
-    return NextResponse.json({ success: true, message: "Ignored non-user ID" });
+    return NextResponse.json({ success: true, message: "Ignored: ID is not a User ID" });
   }
 
   try {
-    // --- START OF UPDATED LOGIC ---
+    // --- START OF LOGIC ---
     
-    // 1. Determine Target Plan based on Event
-    let targetPlan = "free"; // Default for signups (user.created)
-    
-    if (eventType === "subscription.created" || eventType === "subscription.updated") {
+    // Default values
+    let planToSet = "free"; 
+    const isSubscriptionEvent = eventType.startsWith("subscription.");
+
+    // ✅ SIRF Subscription events par status check karein
+    if (isSubscriptionEvent) {
       const status = evt.data.status;
-      // Agar status active hai tabhi plus, warna free (for cancellations)
-      targetPlan = (status === "active" || status === "trialing") ? "plus" : "free";
-    } else if (eventType === "subscription.deleted") {
-      targetPlan = "free";
+      // Agar status active ya trialing hai toh hi plus hoga
+      if (status === "active" || status === "trialing") {
+        planToSet = "plus";
+      }
     }
 
-    // 2. Neon Database Sync
+    // ✅ NEON DATABASE SYNC
+    // Agar user.created hai: create block chalega (Plan: Free)
+    // Agar subscription.created/updated hai: update block chalega (Plan: status ke mutabiq)
     await prisma.user.upsert({
       where: { id: userId },
-      update: { plan: targetPlan }, // Existing user ka plan update hoga
+      update: { 
+        // Plan sirf tab update karein jab signal subscription se aaye
+        ...(isSubscriptionEvent && { plan: planToSet })
+      },
       create: {
         id: userId,
-        plan: "free", // ✅ FIX: Naya user signup par hamesha FREE hoga
+        plan: "free", // 👈 Hamesha naya user free se shuru hoga
         name: evt.data.first_name || evt.data.payer?.first_name || "New User",
         email: evt.data.email_addresses?.[0]?.email_address || evt.data.payer?.email || "sync@user.com",
         image: evt.data.image_url || "",
       },
     });
 
-    // 3. Clerk Metadata Sync (Optional but good for UI badges)
-    try {
-      await clerkClient.users.updateUser(userId, {
-        publicMetadata: { plan: targetPlan },
-      });
-    } catch (e) {
-      console.log("Clerk Metadata update skipped");
+    // ✅ CLERK METADATA SYNC
+    // Metadata sirf tab badlein jab subscription ka koi action ho
+    if (isSubscriptionEvent) {
+      try {
+        await clerkClient.users.updateUser(userId, {
+          publicMetadata: { plan: planToSet },
+        });
+      } catch (e) {
+        console.log("Clerk update skipped (User might not exist yet)");
+      }
     }
 
-    console.log(`🔄 User ${userId} set to: ${targetPlan.toUpperCase()}`);
-    // --- END OF UPDATED LOGIC ---
+    console.log(`✅ Success: ${userId} is now ${planToSet.toUpperCase()} via ${eventType}`);
 
   } catch (error) {
     console.error("❌ Sync Error:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 200 });
   }
 
   return NextResponse.json({ success: true });
