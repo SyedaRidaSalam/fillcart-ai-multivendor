@@ -53,13 +53,15 @@ export async function POST(req) {
   if (eventType === "subscription.created" || eventType === "subscription.updated") {
     
     // 🔥 FIXED USER ID: Ye Clerk ke har tarah ke JSON structure se ID nikaal lega
-    const userId = 
-      evt.data.user_id || 
-      evt.data.id || 
-      (evt.data.payer ? evt.data.payer.user_id : null) ||
-      (evt.data.object ? evt.data.object.user_id : null);
+// Is line ko update karein taake har jagah se ID dhoonde
+const userId = 
+  evt.data.user_id || 
+  evt.data.id || 
+  evt.data.payer?.user_id || 
+  evt.data.object?.user_id ||
+  evt.data.object?.customer; 
 
-    console.log("Processing Webhook for User ID:", userId);
+console.log("DEBUG: Extracted User ID is:", userId);
 
     if (!userId) {
       console.error("❌ Sync Error: No valid User ID found in payload");
