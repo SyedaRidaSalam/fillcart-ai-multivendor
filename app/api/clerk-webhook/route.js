@@ -12,26 +12,28 @@ export async function POST(req) {
   const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
 
   if (!WEBHOOK_SECRET) {
-    return NextResponse.json({ error: "Missing webhook secret" }, { status: 500 });
+    console.error("Missing CLERK_WEBHOOK_SECRET");
+    return NextResponse.json({ error: "Missing secret" }, { status: 500 });
   }
 
-  // Get headers
+  // 1. Headers nikaalein
   const headerList = await headers();
   const svix_id = headerList.get("svix-id");
   const svix_timestamp = headerList.get("svix-timestamp");
   const svix_signature = headerList.get("svix-signature");
 
   if (!svix_id || !svix_timestamp || !svix_signature) {
-    return new Response("Error occured -- no svix headers", { status: 400 });
+    return new Response("Error: Missing svix headers", { status: 400 });
   }
 
-  // Get the body as string for Svix verification
+  // 2. Payload parse karein
   const payload = await req.json();
   const body = JSON.stringify(payload);
 
   const wh = new Webhook(WEBHOOK_SECRET);
   let evt;
 
+  // 3. Verify karein ke ye Clerk se hi aaya hai
   try {
     evt = wh.verify(body, {
       "svix-id": svix_id,
@@ -39,31 +41,63 @@ export async function POST(req) {
       "svix-signature": svix_signature,
     });
   } catch (err) {
-    console.error("Error verifying webhook:", err);
-    return new Response("Error occured", { status: 400 });
+    console.error("Error verifying webhook:", err.message);
+    return new Response("Error: Invalid signature", { status: 400 });
   }
 
   const eventType = evt.type;
+  console.log(`Webhook received: ${eventType}`);
 
+  // 4. SUBSCRIPTION LOGIC
   if (eventType === "subscription.created" || eventType === "subscription.updated") {
-    const { user_id } = evt.data;
+    // Testing dummy data aur real data dono handle karein
+    const userId = evt.data.user_id || evt.data.object?.user_id;
+
+    // Agar ID dummy hai (jo Testing tab bhejta hai), toh process na karein
+    if (!userId || userId.startsWith("obj_") || userId === "user_2...") {
+      console.log("Ignored: Test/Invalid User ID");
+      return NextResponse.json({ success: true, message: "Test data ignored" });
+    }
 
     try {
-      // 1. Clerk Update
-      await clerkClient.users.updateUser(user_id, {
+      // Step A: Clerk Metadata update karein (Frontend ke liye)
+      await clerkClient.users.updateUser(userId, {
         publicMetadata: { plan: "plus" },
       });
 
-      // 2. Neon DB Update (Using upsert to be safe)
-      await prisma.user.update({
-        where: { id: user_id },
-        data: { plan: "plus" },
+      // Step B: Neon Database update karein (Coupon API ke liye)
+      // Upsert ka matlab: Agar user nahi hai toh bana do, hai toh update kar do
+      await prisma.user.upsert({
+        where: { id: userId },
+        update: { plan: "plus" },
+        create: {
+          id: userId,
+          plan: "plus",
+          name: "Member", 
+          email: "synced_via_webhook@test.com",
+          image: "",
+        },
       });
 
-      console.log(`User ${user_id} upgraded to plus`);
-    } catch (dbError) {
-      console.error("Database/Clerk Update Error:", dbError);
-      return NextResponse.json({ error: "Sync failed" }, { status: 500 });
+      console.log(`Successfully upgraded user ${userId} to PLUS`);
+    } catch (error) {
+      console.error("Sync Error:", error.message);
+      // Status 200 hi bhejenge taake Clerk bar bar retry na kare
+      return NextResponse.json({ error: error.message }, { status: 200 });
+    }
+  }
+
+  // 5. SUBSCRIPTION DELETED (Optional: Downgrade to free)
+  if (eventType === "subscription.deleted") {
+    const userId = evt.data.user_id;
+    if (userId) {
+        await prisma.user.update({
+            where: { id: userId },
+            data: { plan: "free" }
+        });
+        await clerkClient.users.updateUser(userId, {
+            publicMetadata: { plan: "free" },
+        });
     }
   }
 
