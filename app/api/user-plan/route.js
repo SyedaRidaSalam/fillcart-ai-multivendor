@@ -7,10 +7,13 @@ export async function GET(req) {
 
   if (!userId) return NextResponse.json({ plan: "free" });
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { plan: true }
-  });
-
-  return NextResponse.json({ plan: user?.plan || "free" });
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { plan: true }
+    });
+    return NextResponse.json({ plan: user?.plan || "free" });
+  } catch (error) {
+    return NextResponse.json({ plan: "free" }, { status: 500 });
+  }
 }
