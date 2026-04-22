@@ -1,61 +1,71 @@
-// ... existing imports
+import { headers } from "next/headers";
+import { Webhook } from "svix";
 import prisma from "@/lib/prisma";
+import { createClerkClient } from "@clerk/backend";
+import { NextResponse } from "next/server";
+
+const clerkClient = createClerkClient({
+  secretKey: process.env.CLERK_SECRET_KEY,
+});
 
 export async function POST(req) {
+  const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
+
+  if (!WEBHOOK_SECRET) {
+    return NextResponse.json({ error: "Missing webhook secret" }, { status: 500 });
+  }
+
+  // Get headers
+  const headerList = await headers();
+  const svix_id = headerList.get("svix-id");
+  const svix_timestamp = headerList.get("svix-timestamp");
+  const svix_signature = headerList.get("svix-signature");
+
+  if (!svix_id || !svix_timestamp || !svix_signature) {
+    return new Response("Error occured -- no svix headers", { status: 400 });
+  }
+
+  // Get the body as string for Svix verification
+  const payload = await req.json();
+  const body = JSON.stringify(payload);
+
+  const wh = new Webhook(WEBHOOK_SECRET);
+  let evt;
+
   try {
-    const payload = await req.text();
-    const headerList = await headers();
-
-    const svix_id = headerList.get("svix-id");
-    const svix_timestamp = headerList.get("svix-timestamp");
-    const svix_signature = headerList.get("svix-signature");
-
-    const wh = new Webhook(process.env.CLERK_WEBHOOK_SECRET);
-
-    const event = wh.verify(payload, {
+    evt = wh.verify(body, {
       "svix-id": svix_id,
       "svix-timestamp": svix_timestamp,
       "svix-signature": svix_signature,
     });
+  } catch (err) {
+    console.error("Error verifying webhook:", err);
+    return new Response("Error occured", { status: 400 });
+  }
 
-    // 🔥 SUBSCRIPTION EVENT (Jab user plan khareede ya change kare)
-    if (event.type === "subscription.created" || event.type === "subscription.updated") {
-      const userId = event.data.user_id;
+  const eventType = evt.type;
 
-      // 1. Clerk Update (Frontend ke liye)
-      await clerkClient.users.updateUser(userId, {
-        publicMetadata: {
-          plan: "plus",
-        },
+  if (eventType === "subscription.created" || eventType === "subscription.updated") {
+    const { user_id } = evt.data;
+
+    try {
+      // 1. Clerk Update
+      await clerkClient.users.updateUser(user_id, {
+        publicMetadata: { plan: "plus" },
       });
 
-      // 2. 🔥 NEON DB UPDATE (Yeh line miss thi - Isse Coupon chale ga)
+      // 2. Neon DB Update (Using upsert to be safe)
       await prisma.user.update({
-        where: { id: userId },
+        where: { id: user_id },
         data: { plan: "plus" },
       });
 
-      console.log(`WEBHOOK: User ${userId} updated to PLUS in Neon DB`);
+      console.log(`User ${user_id} upgraded to plus`);
+    } catch (dbError) {
+      console.error("Database/Clerk Update Error:", dbError);
+      return NextResponse.json({ error: "Sync failed" }, { status: 500 });
     }
-
-    // 🔥 OPTIONAL: Jab subscription khatam ho jaye (Downgrade to Free)
-    if (event.type === "subscription.deleted") {
-        const userId = event.data.user_id;
-
-        await clerkClient.users.updateUser(userId, {
-            publicMetadata: { plan: "free" },
-        });
-
-        await prisma.user.update({
-            where: { id: userId },
-            data: { plan: "free" },
-        });
-    }
-
-    return NextResponse.json({ success: true });
-
-  } catch (error) {
-    console.error("WEBHOOK_ERROR:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  return NextResponse.json({ success: true });
 }
