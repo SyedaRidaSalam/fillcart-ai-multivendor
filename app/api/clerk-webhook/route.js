@@ -54,10 +54,10 @@ export async function POST(req) {
     const userId = evt.data.user_id || evt.data.object?.user_id;
 
     // Agar ID dummy hai (jo Testing tab bhejta hai), toh process na karein
-    if (!userId || userId.startsWith("obj_") || userId === "user_2...") {
-      console.log("Ignored: Test/Invalid User ID");
-      return NextResponse.json({ success: true, message: "Test data ignored" });
-    }
+    // if (!userId || userId.startsWith("obj_") || userId === "user_2...") {
+    //   console.log("Ignored: Test/Invalid User ID");
+    //   return NextResponse.json({ success: true, message: "Test data ignored" });
+    // }
 
     try {
       // Step A: Clerk Metadata update karein (Frontend ke liye)
