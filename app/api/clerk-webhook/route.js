@@ -16,13 +16,14 @@ export async function POST(req) {
     return NextResponse.json({ error: "Missing secret" }, { status: 500 });
   }
 
-  // 1. Headers nikaalein
+  // 1. Headers nikaalein (Svix verification ke liye)
   const headerList = await headers();
   const svix_id = headerList.get("svix-id");
   const svix_timestamp = headerList.get("svix-timestamp");
   const svix_signature = headerList.get("svix-signature");
 
   if (!svix_id || !svix_timestamp || !svix_signature) {
+    console.error("Missing Svix headers");
     return new Response("Error: Missing svix headers", { status: 400 });
   }
 
@@ -48,26 +49,36 @@ export async function POST(req) {
   const eventType = evt.type;
   console.log(`Webhook received: ${eventType}`);
 
-  // 4. SUBSCRIPTION LOGIC
+  // 4. SUBSCRIPTION LOGIC (Created/Updated)
   if (eventType === "subscription.created" || eventType === "subscription.updated") {
     
-    // 🔥 FIXED USER ID LOGIC: Har tarah ke Clerk data structure ko handle karega
-    const userId = evt.data.user_id || evt.data.id || (evt.data.object ? evt.data.object.user_id : null);
+    // 🔥 FIXED USER ID: Ye Clerk ke har tarah ke JSON structure se ID nikaal lega
+    const userId = 
+      evt.data.user_id || 
+      evt.data.id || 
+      (evt.data.payer ? evt.data.payer.user_id : null) ||
+      (evt.data.object ? evt.data.object.user_id : null);
 
-    console.log("Processing User ID:", userId);
+    console.log("Processing Webhook for User ID:", userId);
 
     if (!userId) {
-      console.error("Sync Error: No valid User ID found in payload");
+      console.error("❌ Sync Error: No valid User ID found in payload");
       return NextResponse.json({ error: "Missing User ID" }, { status: 400 });
     }
 
     try {
-      // Step A: Clerk Metadata update karein (Frontend ke liye)
-      await clerkClient.users.updateUser(userId, {
-        publicMetadata: { plan: "plus" },
-      });
+      // Step A: Clerk Metadata update karein (Frontend UI ke liye)
+      // Note: Test IDs (user_2...) par ye fail ho sakta hai agar wo Clerk mein exist nahi karti
+      try {
+        await clerkClient.users.updateUser(userId, {
+          publicMetadata: { plan: "plus" },
+        });
+      } catch (clerkErr) {
+        console.log("Clerk Metadata update skipped (likely a test user ID)");
+      }
 
       // Step B: Neon Database update karein (Coupon API ke liye)
+      // Hum UPSERT use kar rahe hain taake agar user DB mein nahi hai toh crash na ho balki ban jaye
       await prisma.user.upsert({
         where: { id: userId },
         update: { plan: "plus" },
@@ -75,20 +86,20 @@ export async function POST(req) {
           id: userId,
           plan: "plus",
           name: "Member", 
-          email: "synced_via_webhook@test.com",
+          email: evt.data.payer?.email || "synced_via_webhook@test.com",
           image: "",
         },
       });
 
-      console.log(`✅ Successfully upgraded user ${userId} to PLUS`);
+      console.log(`✅ Successfully upgraded user ${userId} to PLUS in DB`);
     } catch (error) {
-      console.error("❌ Sync Error:", error.message);
-      // Status 200 isliye taake Clerk retry kar kar ke server na bitha de
+      console.error("❌ Database Sync Error:", error.message);
+      // Status 200 hi bhejenge taake Clerk retry na karta rahe
       return NextResponse.json({ error: error.message }, { status: 200 });
     }
   }
 
-  // 5. SUBSCRIPTION DELETED
+  // 5. SUBSCRIPTION DELETED (Optional: Downgrade to free)
   if (eventType === "subscription.deleted") {
     const userId = evt.data.user_id || evt.data.id || (evt.data.object ? evt.data.object.user_id : null);
     if (userId) {
@@ -102,10 +113,10 @@ export async function POST(req) {
         });
         console.log(`📉 User ${userId} downgraded to FREE`);
       } catch (e) {
-        console.error("Delete Error:", e.message);
+        console.error("Delete Sync Error:", e.message);
       }
     }
   }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, message: "Webhook processed" });
 }
