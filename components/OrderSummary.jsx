@@ -1,7 +1,7 @@
 "use client";
 
 import { PlusIcon, SquarePenIcon, XIcon } from "lucide-react";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import AddressModal from "./AddressModal";
 import { useSelector } from "react-redux";
 import toast from "react-hot-toast";
@@ -11,7 +11,6 @@ import axios from "axios";
 
 const OrderSummary = ({ totalPrice, items }) => {
   const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || "$";
-
   const router = useRouter();
   const { user } = useUser();
 
@@ -22,32 +21,41 @@ const OrderSummary = ({ totalPrice, items }) => {
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [couponCodeInput, setCouponCodeInput] = useState("");
   const [coupon, setCoupon] = useState("");
+  
+  // ✅ New State for fresh plan from DB
+  const [dbPlan, setDbPlan] = useState("free");
 
-  // ✅ FIXED PLAN LOGIC (ONLY CHANGE)
-  const plan = user?.publicMetadata?.plan?.toLowerCase() || "free";
-  const isPlus = plan === "plus";
+  // ✅ Fresh Plan fetch karein Neon DB se
+  useEffect(() => {
+    const fetchUserPlan = async () => {
+      if (user?.id) {
+        try {
+          const { data } = await axios.get(`/api/user-plan?userId=${user.id}`);
+          setDbPlan(data.plan.toLowerCase());
+        } catch (error) {
+          console.error("Error fetching plan:", error);
+        }
+      }
+    };
+    fetchUserPlan();
+  }, [user?.id]);
 
-  console.log("USER PLAN:", plan);
-  console.log("IS PLUS:", isPlus);
+  const isPlus = dbPlan === "plus";
 
-  // ✅ SHIPPING
+  // ✅ SHIPPING LOGIC (Back to normal)
   const shippingFee = isPlus ? 0 : 5;
 
-  // ✅ TOTAL
-  const finalTotal = coupon
-    ? totalPrice - (coupon.discount / 100) * totalPrice + shippingFee
-    : totalPrice + shippingFee;
+  // ✅ TOTAL CALCULATION
+  const discountAmount = coupon ? (coupon.discount / 100) * totalPrice : 0;
+  const finalTotal = totalPrice - discountAmount + shippingFee;
 
-  // COUPON APPLY
   const handleCouponCode = async (event) => {
     event.preventDefault();
     try {
       if (!user) return toast.error("Please login first");
-
       const { data } = await axios.post("/api/coupon", {
         code: couponCodeInput,
       });
-
       setCoupon(data.coupon);
       toast.success("Coupon applied!");
     } catch (error) {
@@ -55,7 +63,6 @@ const OrderSummary = ({ totalPrice, items }) => {
     }
   };
 
-  // PLACE ORDER
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
     router.push("/orders");
@@ -63,145 +70,96 @@ const OrderSummary = ({ totalPrice, items }) => {
 
   return (
     <div className="w-full max-w-lg lg:max-w-[340px] bg-slate-50/30 border border-slate-200 text-slate-500 text-sm rounded-xl p-7">
-
-      <h2 className="text-xl font-medium text-slate-600">
-        Payment Summary
-      </h2>
-
-      {/* PAYMENT */}
-      <p className="text-slate-400 text-xs my-4">Payment Method</p>
-
-      <div className="flex gap-2 items-center">
-        <input
-          type="radio"
-          checked={paymentMethod === "COD"}
-          onChange={() => setPaymentMethod("COD")}
-        />
-        <label>COD</label>
+      <h2 className="text-xl font-medium text-slate-600">Payment Summary</h2>
+      
+      {/* Plan Badge for Debugging (Optional) */}
+      <div className="mt-2">
+        <span className={`px-2 py-1 rounded-full text-[10px] ${isPlus ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+          Plan: {dbPlan.toUpperCase()}
+        </span>
       </div>
 
+      {/* PAYMENT METHOD SECTION */}
+      <p className="text-slate-400 text-xs my-4">Payment Method</p>
+      <div className="flex gap-2 items-center">
+        <input type="radio" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} />
+        <label>COD</label>
+      </div>
       <div className="flex gap-2 items-center mt-1">
-        <input
-          type="radio"
-          checked={paymentMethod === "STRIPE"}
-          onChange={() => setPaymentMethod("STRIPE")}
-        />
+        <input type="radio" checked={paymentMethod === "STRIPE"} onChange={() => setPaymentMethod("STRIPE")} />
         <label>Stripe</label>
       </div>
 
-      {/* ADDRESS */}
+      {/* ADDRESS SECTION */}
       <div className="my-4 py-4 border-y border-slate-200 text-slate-400">
         <p>Address</p>
-
         {selectedAddress ? (
           <div className="flex gap-2 items-center">
-            <p>
-              {selectedAddress.name}, {selectedAddress.city},{" "}
-              {selectedAddress.state}, {selectedAddress.zip}
-            </p>
-            <SquarePenIcon
-              onClick={() => setSelectedAddress(null)}
-              size={18}
-            />
+            <p>{selectedAddress.name}, {selectedAddress.city}, {selectedAddress.state}, {selectedAddress.zip}</p>
+            <SquarePenIcon onClick={() => setSelectedAddress(null)} size={18} className="cursor-pointer" />
           </div>
         ) : (
           <div>
             {addressList.length > 0 && (
-              <select
-                className="border p-2 w-full my-3 rounded"
-                onChange={(e) =>
-                  setSelectedAddress(addressList[e.target.value])
-                }
-              >
+              <select className="border p-2 w-full my-3 rounded" onChange={(e) => setSelectedAddress(addressList[e.target.value])}>
                 <option>Select Address</option>
-                {addressList.map((a, i) => (
-                  <option key={i} value={i}>
-                    {a.name}, {a.city}, {a.state}, {a.zip}
-                  </option>
-                ))}
+                {addressList.map((a, i) => (<option key={i} value={i}>{a.name}, {a.city}, {a.state}, {a.zip}</option>))}
               </select>
             )}
-
-            <button
-              onClick={() => setShowAddressModal(true)}
-              className="flex items-center gap-1"
-            >
+            <button onClick={() => setShowAddressModal(true)} className="flex items-center gap-1">
               Add Address <PlusIcon size={18} />
             </button>
           </div>
         )}
       </div>
 
-      {/* SUMMARY */}
+      {/* SUMMARY DETAILS */}
       <div className="pb-4 border-b">
         <div className="flex justify-between">
           <div className="text-slate-400">
             <p>Subtotal:</p>
             <p>Shipping:</p>
-            {coupon && <p>Coupon:</p>}
+            {coupon && <p>Coupon ({coupon.code}):</p>}
           </div>
-
           <div className="text-right font-medium">
             <p>{currency}{totalPrice}</p>
-            <p>{isPlus ? "Free" : `${currency}${shippingFee}`}</p>
-
-            {coupon && (
-              <p>
-                -{currency}
-                {(coupon.discount / 100 * totalPrice).toFixed(2)}
-              </p>
-            )}
+            <p className={isPlus ? "text-green-600" : ""}>
+              {isPlus ? "FREE" : `${currency}${shippingFee}`}
+            </p>
+            {coupon && <p className="text-red-500">-{currency}{discountAmount.toFixed(2)}</p>}
           </div>
         </div>
       </div>
 
-      {/* COUPON */}
+      {/* COUPON INPUT */}
       {!coupon ? (
-        <form
-          onSubmit={(e) =>
-            toast.promise(handleCouponCode(e), {
-              loading: "Checking Coupon...",
-            })
-          }
-          className="flex gap-2 mt-3"
-        >
-          <input
-            value={couponCodeInput}
-            onChange={(e) => setCouponCodeInput(e.target.value)}
-            placeholder="Coupon Code"
-            className="border p-2 w-full rounded"
-          />
-          <button className="bg-slate-600 text-white px-3 rounded">
-            Apply
-          </button>
+        <form onSubmit={(e) => toast.promise(handleCouponCode(e), { loading: "Checking...", })} className="flex gap-2 mt-3">
+          <input value={couponCodeInput} onChange={(e) => setCouponCodeInput(e.target.value)} placeholder="Coupon Code" className="border p-2 w-full rounded" />
+          <button className="bg-slate-600 text-white px-3 rounded">Apply</button>
         </form>
       ) : (
-        <div className="flex items-center gap-2 mt-2 text-xs">
-          <p>{coupon.code}</p>
-          <p>{coupon.description}</p>
-          <XIcon onClick={() => setCoupon("")} size={18} />
+        <div className="flex justify-between items-center bg-green-50 p-2 mt-2 rounded border border-green-200">
+          <div>
+            <p className="font-bold text-green-700 text-xs">{coupon.code}</p>
+            <p className="text-[10px] text-green-600">{coupon.description}</p>
+          </div>
+          <XIcon onClick={() => setCoupon("")} size={16} className="text-green-700 cursor-pointer" />
         </div>
       )}
 
-      {/* TOTAL */}
-      <div className="flex justify-between py-4">
-        <p>Total:</p>
-        <p className="font-medium">
-          {currency}
-          {finalTotal.toFixed(2)}
+      {/* FINAL TOTAL */}
+      <div className="flex justify-between py-4 text-lg">
+        <p className="text-slate-600 font-bold">Total:</p>
+        <p className="font-bold text-slate-800">
+          {currency}{finalTotal.toFixed(2)}
         </p>
       </div>
 
-      <button
-        onClick={handlePlaceOrder}
-        className="w-full bg-slate-700 text-white py-2 rounded"
-      >
+      <button onClick={handlePlaceOrder} className="w-full bg-slate-700 hover:bg-slate-800 text-white py-3 rounded-xl transition-all">
         Place Order
       </button>
 
-      {showAddressModal && (
-        <AddressModal setShowAddressModal={setShowAddressModal} />
-      )}
+      {showAddressModal && <AddressModal setShowAddressModal={setShowAddressModal} />}
     </div>
   );
 };
