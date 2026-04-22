@@ -50,14 +50,16 @@ export async function POST(req) {
 
   // 4. SUBSCRIPTION LOGIC
   if (eventType === "subscription.created" || eventType === "subscription.updated") {
-    // Testing dummy data aur real data dono handle karein
-    const userId = evt.data.user_id || evt.data.object?.user_id;
+    
+    // 🔥 FIXED USER ID LOGIC: Har tarah ke Clerk data structure ko handle karega
+    const userId = evt.data.user_id || evt.data.id || (evt.data.object ? evt.data.object.user_id : null);
 
-    // Agar ID dummy hai (jo Testing tab bhejta hai), toh process na karein
-    // if (!userId || userId.startsWith("obj_") || userId === "user_2...") {
-    //   console.log("Ignored: Test/Invalid User ID");
-    //   return NextResponse.json({ success: true, message: "Test data ignored" });
-    // }
+    console.log("Processing User ID:", userId);
+
+    if (!userId) {
+      console.error("Sync Error: No valid User ID found in payload");
+      return NextResponse.json({ error: "Missing User ID" }, { status: 400 });
+    }
 
     try {
       // Step A: Clerk Metadata update karein (Frontend ke liye)
@@ -66,7 +68,6 @@ export async function POST(req) {
       });
 
       // Step B: Neon Database update karein (Coupon API ke liye)
-      // Upsert ka matlab: Agar user nahi hai toh bana do, hai toh update kar do
       await prisma.user.upsert({
         where: { id: userId },
         update: { plan: "plus" },
@@ -79,25 +80,30 @@ export async function POST(req) {
         },
       });
 
-      console.log(`Successfully upgraded user ${userId} to PLUS`);
+      console.log(`✅ Successfully upgraded user ${userId} to PLUS`);
     } catch (error) {
-      console.error("Sync Error:", error.message);
-      // Status 200 hi bhejenge taake Clerk bar bar retry na kare
+      console.error("❌ Sync Error:", error.message);
+      // Status 200 isliye taake Clerk retry kar kar ke server na bitha de
       return NextResponse.json({ error: error.message }, { status: 200 });
     }
   }
 
-  // 5. SUBSCRIPTION DELETED (Optional: Downgrade to free)
+  // 5. SUBSCRIPTION DELETED
   if (eventType === "subscription.deleted") {
-    const userId = evt.data.user_id;
+    const userId = evt.data.user_id || evt.data.id || (evt.data.object ? evt.data.object.user_id : null);
     if (userId) {
+      try {
         await prisma.user.update({
-            where: { id: userId },
-            data: { plan: "free" }
+          where: { id: userId },
+          data: { plan: "free" }
         });
         await clerkClient.users.updateUser(userId, {
-            publicMetadata: { plan: "free" },
+          publicMetadata: { plan: "free" },
         });
+        console.log(`📉 User ${userId} downgraded to FREE`);
+      } catch (e) {
+        console.error("Delete Error:", e.message);
+      }
     }
   }
 
