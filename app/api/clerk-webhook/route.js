@@ -16,14 +16,13 @@ export async function POST(req) {
     return NextResponse.json({ error: "Missing secret" }, { status: 500 });
   }
 
-  // 1. Headers nikaalein (Svix verification ke liye)
+  // 1. Headers nikaalein
   const headerList = await headers();
   const svix_id = headerList.get("svix-id");
   const svix_timestamp = headerList.get("svix-timestamp");
   const svix_signature = headerList.get("svix-signature");
 
   if (!svix_id || !svix_timestamp || !svix_signature) {
-    console.error("Missing Svix headers");
     return new Response("Error: Missing svix headers", { status: 400 });
   }
 
@@ -34,7 +33,6 @@ export async function POST(req) {
   const wh = new Webhook(WEBHOOK_SECRET);
   let evt;
 
-  // 3. Verify karein ke ye Clerk se hi aaya hai
   try {
     evt = wh.verify(body, {
       "svix-id": svix_id,
@@ -49,76 +47,52 @@ export async function POST(req) {
   const eventType = evt.type;
   console.log(`Webhook received: ${eventType}`);
 
-  // 4. SUBSCRIPTION LOGIC (Created/Updated)
+  // 3. SUBSCRIPTION LOGIC (Created/Updated)
   if (eventType === "subscription.created" || eventType === "subscription.updated") {
     
-    // 🔥 FIXED USER ID: Ye Clerk ke har tarah ke JSON structure se ID nikaal lega
-// Is line ko update karein taake har jagah se ID dhoonde
-const userId = 
-  evt.data.user_id || 
-  evt.data.id || 
-  evt.data.payer?.user_id || 
-  evt.data.object?.user_id ||
-  evt.data.object?.customer; 
+    // 🔥 FIX: Pehle payer.user_id check karein kyunki main 'id' subscription ID hoti hai
+    const userId = 
+      evt.data.payer?.user_id || 
+      evt.data.user_id || 
+      (evt.data.object ? evt.data.object.user_id : null);
 
-console.log("DEBUG: Extracted User ID is:", userId);
+    console.log("Processing User ID:", userId);
 
-    if (!userId) {
-      console.error("❌ Sync Error: No valid User ID found in payload");
-      return NextResponse.json({ error: "Missing User ID" }, { status: 400 });
+    // Filter out subscription IDs (csub_...)
+    if (!userId || userId.startsWith("csub_")) {
+      console.error("❌ Sync Error: Valid User ID not found (Got Subscription ID instead)");
+      return NextResponse.json({ error: "Invalid User ID" }, { status: 200 });
     }
 
     try {
-      // Step A: Clerk Metadata update karein (Frontend UI ke liye)
-      // Note: Test IDs (user_2...) par ye fail ho sakta hai agar wo Clerk mein exist nahi karti
-      try {
-        await clerkClient.users.updateUser(userId, {
-          publicMetadata: { plan: "plus" },
-        });
-      } catch (clerkErr) {
-        console.log("Clerk Metadata update skipped (likely a test user ID)");
-      }
-
-      // Step B: Neon Database update karein (Coupon API ke liye)
-      // Hum UPSERT use kar rahe hain taake agar user DB mein nahi hai toh crash na ho balki ban jaye
+      // Step A: Neon Database update (Upsert)
       await prisma.user.upsert({
         where: { id: userId },
         update: { plan: "plus" },
         create: {
           id: userId,
           plan: "plus",
-          name: "Member", 
-          email: evt.data.payer?.email || "synced_via_webhook@test.com",
+          name: evt.data.payer?.first_name || "Member",
+          email: evt.data.payer?.email || "synced@test.com",
           image: "",
         },
       });
 
-      console.log(`✅ Successfully upgraded user ${userId} to PLUS in DB`);
+      // Step B: Clerk Metadata update (Clerk Dashboard ke liye)
+      try {
+        await clerkClient.users.updateUser(userId, {
+          publicMetadata: { plan: "plus" },
+        });
+      } catch (e) {
+        console.log("Clerk Metadata update skipped (likely test user)");
+      }
+
+      console.log(`✅ Successfully upgraded user ${userId} to PLUS`);
     } catch (error) {
-      console.error("❌ Database Sync Error:", error.message);
-      // Status 200 hi bhejenge taake Clerk retry na karta rahe
+      console.error("❌ Sync Error:", error.message);
       return NextResponse.json({ error: error.message }, { status: 200 });
     }
   }
 
-  // 5. SUBSCRIPTION DELETED (Optional: Downgrade to free)
-  if (eventType === "subscription.deleted") {
-    const userId = evt.data.user_id || evt.data.id || (evt.data.object ? evt.data.object.user_id : null);
-    if (userId) {
-      try {
-        await prisma.user.update({
-          where: { id: userId },
-          data: { plan: "free" }
-        });
-        await clerkClient.users.updateUser(userId, {
-          publicMetadata: { plan: "free" },
-        });
-        console.log(`📉 User ${userId} downgraded to FREE`);
-      } catch (e) {
-        console.error("Delete Sync Error:", e.message);
-      }
-    }
-  }
-
-  return NextResponse.json({ success: true, message: "Webhook processed" });
+  return NextResponse.json({ success: true });
 }
