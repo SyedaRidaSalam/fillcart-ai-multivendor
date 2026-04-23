@@ -75,12 +75,12 @@ const OrderSummary = ({ totalPrice, items }) => {
   }, []);
 
   // ✅ Paddle Initialize (Design par zero effect)
-  useEffect(() => {
-    initializePaddle({
-      environment: "sandbox",
-      token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
-    }).then((instance) => setPaddle(instance));
-  }, []);
+useEffect(() => {
+  initializePaddle({
+    environment: "sandbox", 
+    token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
+  }).then((instance) => setPaddle(instance));
+}, []);
 
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
@@ -114,8 +114,8 @@ const OrderSummary = ({ totalPrice, items }) => {
               },
               items: [
                 {
-                  priceId: "pro_01kpy68f9k7098tkry05s3845j",
-                  quantity: 1,
+                  priceId: "pri_01kpy9dt32f9ezc1wdnznhdhdk",
+                  quantity: Math.round(finalTotal),
                 },
               ],
               customData: {
@@ -160,7 +160,9 @@ const OrderSummary = ({ totalPrice, items }) => {
       <p className="text-slate-400 text-xs my-4">Payment Method</p>
       <div className="flex gap-2 items-center">
         <input
+          className="cursor-pointer"
           type="radio"
+          name="payment"
           checked={paymentMethod === "COD"}
           onChange={() => setPaymentMethod("COD")}
         />
@@ -168,7 +170,9 @@ const OrderSummary = ({ totalPrice, items }) => {
       </div>
       <div className="flex gap-2 items-center mt-1">
         <input
+          className="cursor-pointer"
           type="radio"
+          name="payment"
           checked={paymentMethod === "PADDLE"} // "STRIPE" ko "PADDLE" se badal diya
           onChange={() => setPaymentMethod("PADDLE")}
         />
