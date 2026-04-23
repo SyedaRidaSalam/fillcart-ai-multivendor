@@ -187,29 +187,29 @@ const OrderSummary = ({ totalPrice, items }) => {
 
       {/* SUMMARY DETAILS */}
       <div className="pb-4 border-b">
-  <div className="flex justify-between">
-    <div className="text-slate-400">
-      <p>Subtotal:</p>
-      <p>Shipping:</p>
-      {coupon && <p>Coupon ({coupon.code}):</p>}
-    </div>
-    <div className="text-right font-medium">
-      <p>
-        {currency}
-        {Number(totalPrice).toFixed(2)} {/* Fixed decimal here */}
-      </p>
-      <p className={isPlus ? "text-green-600" : ""}>
-        {isPlus ? "FREE" : `${currency}${shippingFee.toFixed(2)}`}
-      </p>
-      {coupon && (
-        <p className="text-red-500">
-          -{currency}
-          {discountAmount.toFixed(2)}
-        </p>
-      )}
-    </div>
-  </div>
-</div>
+        <div className="flex justify-between">
+          <div className="text-slate-400">
+            <p>Subtotal:</p>
+            <p>Shipping:</p>
+            {coupon && <p>Coupon ({coupon.code}):</p>}
+          </div>
+          <div className="text-right font-medium">
+            <p>
+              {currency}
+              {Number(totalPrice).toFixed(2)} {/* Fixed decimal here */}
+            </p>
+            <p className={isPlus ? "text-green-600" : ""}>
+              {isPlus ? "FREE" : `${currency}${shippingFee.toFixed(2)}`}
+            </p>
+            {coupon && (
+              <p className="text-red-500">
+                -{currency}
+                {discountAmount.toFixed(2)}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* COUPON INPUT */}
       {!coupon ? (
@@ -244,13 +244,14 @@ const OrderSummary = ({ totalPrice, items }) => {
       )}
 
       {/* FINAL TOTAL */}
-     <div className="flex justify-between py-4 text-lg">
-  <p className="text-slate-600 font-bold">Total:</p>
-  <p className="font-bold text-slate-800">
-    {currency}
-    {finalTotal.toFixed(2)} {/* Already had toFixed, but ensure it stays */}
-  </p>
-</div>
+      <div className="flex justify-between py-4 text-lg">
+        <p className="text-slate-600 font-bold">Total:</p>
+        <p className="font-bold text-slate-800">
+          {currency}
+          {finalTotal.toFixed(2)}{" "}
+          {/* Already had toFixed, but ensure it stays */}
+        </p>
+      </div>
 
       <button
         onClick={handlePlaceOrder}
