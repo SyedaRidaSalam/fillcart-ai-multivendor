@@ -124,21 +124,27 @@ const OrderSummary = ({ totalPrice, items }) => {
                 userId: user.id,
               },
               // ✅ Ye naya event handler add karein
-              eventCallback: (event) => {
-                if (event.name === "checkout.completed") {
-                  toast.success(
-                    "Payment Received! Your order is being processed. 🚀",
-                    {
-                      duration: 5000,
-                      icon: "✅",
-                    },
-                  );
-                  dispatch(fetchCart({ getToken })); // Cart saaf karne ke liye
-                  setTimeout(() => {
-                    router.push("/orders?success=true"); // Query param add kar rahe hain refresh trigger karne ke liye
-                  }, 3000);
-                }
-              },
+       // handlePlaceOrder ke andar paddle.Checkout.open mein:
+eventCallback: (event) => {
+  console.log("Paddle Event:", event.name); // Debugging ke liye
+
+  // 'checkout.completed' ya 'transaction.confirmed' dono mein se jo bhi hit ho
+  if (event.name === "checkout.completed" || event.name === "transaction.confirmed") {
+    
+    toast.success("Payment Successful! Processing your order...", {
+      icon: '✅',
+      duration: 4000
+    });
+
+    // 1. Cart saaf karein
+    dispatch(fetchCart({ getToken })); 
+
+    // 2. Redirect karein
+    setTimeout(() => {
+      window.location.href = "/orders"; // Router.push ki jagah hard redirect zyada safe hai yahan
+    }, 2000);
+  }
+},
             });
           }
         } else {
