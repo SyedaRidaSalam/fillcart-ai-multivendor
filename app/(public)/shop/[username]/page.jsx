@@ -5,7 +5,8 @@ import { useEffect, useState } from "react"
 import { MailIcon, MapPinIcon } from "lucide-react"
 import Loading from "@/components/Loading"
 import Image from "next/image"
-import { dummyStoreData, productDummyData } from "@/assets/assets"
+import axios from "axios"
+import toast from "react-hot-toast"
 
 export default function StoreShop() {
 
@@ -15,14 +16,26 @@ export default function StoreShop() {
     const [loading, setLoading] = useState(true)
 
     const fetchStoreData = async () => {
-        setStoreInfo(dummyStoreData)
-        setProducts(productDummyData)
-        setLoading(false)
+       try{
+        const {data} = await axios.get(`/api/store/data?username=${username}`)
+        setStoreInfo(data.store)
+        setProducts(data.store.Product || []);
+       } catch (error) {
+            toast.error(error.response?.data?.error || error.message);
+            
+       }
+         setLoading(false)
     }
 
+ // ... existing code ...
+
     useEffect(() => {
-        fetchStoreData()
-    }, [])
+        // Reset loading to true when switching stores
+        setLoading(true);
+        fetchStoreData();
+    }, [username]); // 👈 Yahan 'username' add karna zaroori hai
+
+// ... rest of the code ...
 
     return !loading ? (
         <div className="min-h-[70vh] mx-6">
