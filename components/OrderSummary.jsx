@@ -82,8 +82,13 @@ const OrderSummary = ({ totalPrice, items }) => {
     }).then((instance) => setPaddle(instance));
   }, []);
 
+// Component ke start mein ye ref add karein
+const isPaidRef = useRef(false);
+
 const handlePlaceOrder = async (e) => {
   e.preventDefault();
+  isPaidRef.current = false; // Reset on every click
+
   try {
     if (!user) return toast.error("Please login to place an order");
     if (!selectedAddress) return toast.error("Please select an address");
@@ -118,36 +123,39 @@ const handlePlaceOrder = async (e) => {
               userId: user.id,
             },
             eventCallback: (event) => {
-              if (event.name === "checkout.completed") {
-                window.isPaymentDone = true;
-                toast.success("Payment Successful! Redirecting...");
+              // ✅ Step 1: Payment confirm hote hi ref update karein
+              if (event.name === "checkout.completed" || event.name === "transaction.confirmed") {
+                isPaidRef.current = true;
+                toast.success("Payment Confirmed! Close the window to see your orders.");
               }
             },
             onCheckoutClosed: () => {
-              if (window.isPaymentDone) {
-                dispatch(fetchCart({ getToken }));
-                window.location.assign("/orders");
+              // ✅ Step 2: Cross (X) pe click hote hi check karein
+              if (isPaidRef.current) {
+                dispatch(fetchCart({ getToken })); // Cart empty
+                // Force redirect using window.location for reliability
+                window.location.href = "/orders"; 
               }
             }
           });
         }
       } else {
-        // ✅ COD ke liye simple redirect aur cart clear
-        router.push("/orders");
+        // ✅ COD Flow: Simple and fast
         dispatch(fetchCart({ getToken }));
+        router.push("/orders");
       }
-      return { data, method: paymentMethod }; // Method pass kar rahe hain toast control karne ke liye
+      return { data, method: paymentMethod };
     };
 
     toast.promise(placeOrderPromise(), {
       loading: "Placing your order...",
       success: (res) => {
-        // ✅ Agar method PADDLE hai toh null return karein (koi toast nahi dikhega)
-        // ✅ Agar COD hai toh success message dikhega
-        return res.method === "COD" ? "Order placed successfully! 🎉" : null;
+        // Sirf COD ke liye toast dikhayega
+        return res.method === "COD" ? "Order registered successfully! 🎉" : null;
       },
       error: (err) => err.response?.data?.error || "Failed to place order.",
     });
+
   } catch (error) {
     toast.error(error.message);
   }
@@ -166,8 +174,6 @@ const handlePlaceOrder = async (e) => {
         </span>
       </div>
 
-      {/* PAYMENT METHOD SECTION */}
-      <p className="text-slate-400 text-xs my-4">Payment Method</p>
       {/* PAYMENT METHOD SECTION */}
       <p className="text-slate-400 text-xs my-4">Payment Method</p>
       <div className="flex gap-2 items-center">
