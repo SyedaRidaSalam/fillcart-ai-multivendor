@@ -141,5 +141,5 @@ enum OrderStatus {
 
 enum PaymentMethod {
   COD
-  STRIPE
+  PADDLE
 }

@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { getToken, useUser } from "@clerk/nextjs";
 import axios from "axios";
 import { fetchCart } from "@/lib/features/cart/cartSlice";
+import { initializePaddle } from "@paddle/paddle-js";
 
 const OrderSummary = ({ totalPrice, items }) => {
   const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || "$";
@@ -23,6 +24,7 @@ const OrderSummary = ({ totalPrice, items }) => {
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [couponCodeInput, setCouponCodeInput] = useState("");
   const [coupon, setCoupon] = useState("");
+  const [paddle, setPaddle] = useState(null);
 
   // ✅ New State for fresh plan from DB
   const [dbPlan, setDbPlan] = useState("free");
@@ -65,49 +67,77 @@ const OrderSummary = ({ totalPrice, items }) => {
     }
   };
 
+  useEffect(() => {
+    initializePaddle({
+      environment: "sandbox",
+      token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
+    }).then((instance) => setPaddle(instance));
+  }, []);
+
+  // ✅ Paddle Initialize (Design par zero effect)
+  useEffect(() => {
+    initializePaddle({
+      environment: "sandbox",
+      token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
+    }).then((instance) => setPaddle(instance));
+  }, []);
+
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
     try {
-      // Basic checks before starting the toast
       if (!user) return toast.error("Please login to place an order");
       if (!selectedAddress) return toast.error("Please select an address");
 
-      // Define the actual order logic as a promise
       const placeOrderPromise = async () => {
         const token = await getToken();
         const orderData = {
           addressId: selectedAddress.id,
           items,
-          paymentMethod,
+          paymentMethod, // Ab ye "PADDLE" bhejega backend ko
         };
 
-        if (coupon) {
-          orderData.couponCode = coupon.code;
-        }
+        if (coupon) orderData.couponCode = coupon.code;
 
+        // 1. Order create karein database mein (Normal Flow)
         const { data } = await axios.post("/api/orders", orderData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
 
-        // Handle Redirects or State Updates after success
-        if (paymentMethod === "STRIPE") {
-          window.location.href = data.session.url;
+        // 2. Agar "PADDLE" selected hai toh checkout kholien
+        if (paymentMethod === "PADDLE") {
+          if (paddle) {
+            paddle.Checkout.open({
+              settings: {
+                displayMode: "overlay",
+                theme: "light",
+                successUrl: `${window.location.origin}/orders`,
+              },
+              items: [
+                {
+                  priceId: "pro_01kpy68f9k7098tkry05s3845j",
+                  quantity: 1,
+                },
+              ],
+              customData: {
+                orderIds: data.orderIds.join(","),
+                userId: user.id,
+              },
+            });
+          }
         } else {
           router.push("/orders");
-          // dispatch(fetchCart({ getToken })); // Make sure this is imported
+          dispatch(fetchCart({ getToken }));
         }
-
         return data;
       };
+
       toast.promise(placeOrderPromise(), {
-        loading: "Placing your order... Please wait.",
-        success: "Order placed successfully! 🎉",
+        loading: "Placing your order...",
+        success: "Order registered successfully! 🎉",
         error: (err) => err.response?.data?.error || "Failed to place order.",
       });
     } catch (error) {
-      toast.error(error.response?.data?.error || error.message);
+      toast.error(error.message);
     }
   };
 
@@ -126,21 +156,23 @@ const OrderSummary = ({ totalPrice, items }) => {
 
       {/* PAYMENT METHOD SECTION */}
       <p className="text-slate-400 text-xs my-4">Payment Method</p>
+      {/* PAYMENT METHOD SECTION */}
+      <p className="text-slate-400 text-xs my-4">Payment Method</p>
       <div className="flex gap-2 items-center">
         <input
           type="radio"
           checked={paymentMethod === "COD"}
           onChange={() => setPaymentMethod("COD")}
         />
-        <label>COD</label>
+        <label>Cash on Delivery (COD)</label>
       </div>
       <div className="flex gap-2 items-center mt-1">
         <input
           type="radio"
-          checked={paymentMethod === "STRIPE"}
-          onChange={() => setPaymentMethod("STRIPE")}
+          checked={paymentMethod === "PADDLE"} // "STRIPE" ko "PADDLE" se badal diya
+          onChange={() => setPaymentMethod("PADDLE")}
         />
-        <label>Stripe</label>
+        <label>Online Payment (Paddle)</label>
       </div>
 
       {/* ADDRESS SECTION */}
