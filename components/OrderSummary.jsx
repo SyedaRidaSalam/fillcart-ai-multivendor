@@ -1,7 +1,7 @@
 "use client";
 
 import { PlusIcon, SquarePenIcon, XIcon } from "lucide-react";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import AddressModal from "./AddressModal";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
