@@ -82,87 +82,76 @@ const OrderSummary = ({ totalPrice, items }) => {
     }).then((instance) => setPaddle(instance));
   }, []);
 
-  const handlePlaceOrder = async (e) => {
-    e.preventDefault();
-    try {
-      if (!user) return toast.error("Please login to place an order");
-      if (!selectedAddress) return toast.error("Please select an address");
+const handlePlaceOrder = async (e) => {
+  e.preventDefault();
+  try {
+    if (!user) return toast.error("Please login to place an order");
+    if (!selectedAddress) return toast.error("Please select an address");
 
-      const placeOrderPromise = async () => {
-        const token = await getToken();
-        const orderData = {
-          addressId: selectedAddress.id,
-          items,
-          paymentMethod, // Ab ye "PADDLE" bhejega backend ko
-        };
-
-        if (coupon) orderData.couponCode = coupon.code;
-
-        // 1. Order create karein database mein (Normal Flow)
-        const { data } = await axios.post("/api/orders", orderData, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        // 2. Agar "PADDLE" selected hai toh checkout kholien
-        if (paymentMethod === "PADDLE") {
-          if (paddle) {
-            // handlePlaceOrder ke andar jahan paddle.Checkout.open hai
-            paddle.Checkout.open({
-              settings: {
-                displayMode: "overlay",
-                theme: "light",
-                // successUrl: ... ko yahan se HATA dein (ye issue karta hai)
-              },
-              items: [
-                {
-                  priceId: "pri_01kpy9dt32f9ezc1wdnznhdhdk",
-                  quantity: Math.round(finalTotal),
-                },
-              ],
-              customData: {
-                orderIds: data.orderIds.join(","),
-                userId: user.id,
-              },
-              // ✅ Ye naya event handler add karein
-       // handlePlaceOrder ke andar paddle.Checkout.open mein:
-eventCallback: (event) => {
-  console.log("Paddle Event:", event.name); // Debugging ke liye
-
-  // 'checkout.completed' ya 'transaction.confirmed' dono mein se jo bhi hit ho
-  if (event.name === "checkout.completed" || event.name === "transaction.confirmed") {
-    
-    toast.success("Payment Successful! Processing your order...", {
-      icon: '✅',
-      duration: 4000
-    });
-
-    // 1. Cart saaf karein
-    dispatch(fetchCart({ getToken })); 
-
-    // 2. Redirect karein
-    setTimeout(() => {
-      window.location.href = "/orders"; // Router.push ki jagah hard redirect zyada safe hai yahan
-    }, 2000);
-  }
-},
-            });
-          }
-        } else {
-          router.push("/orders");
-          dispatch(fetchCart({ getToken }));
-        }
-        return data;
+    const placeOrderPromise = async () => {
+      const token = await getToken();
+      const orderData = {
+        addressId: selectedAddress.id,
+        items,
+        paymentMethod,
       };
 
-      toast.promise(placeOrderPromise(), {
-        loading: "Placing your order...",
-        success: "Order registered successfully! 🎉",
-        error: (err) => err.response?.data?.error || "Failed to place order.",
+      if (coupon) orderData.couponCode = coupon.code;
+
+      const { data } = await axios.post("/api/orders", orderData, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-    } catch (error) {
-      toast.error(error.message);
-    }
-  };
+
+      if (paymentMethod === "PADDLE") {
+        if (paddle) {
+          paddle.Checkout.open({
+            settings: {
+              displayMode: "overlay",
+              theme: "light",
+            },
+            items: [{
+              priceId: "pri_01kpy9dt32f9ezc1wdnznhdhdk",
+              quantity: Math.round(finalTotal),
+            }],
+            customData: {
+              orderIds: data.orderIds.join(","),
+              userId: user.id,
+            },
+            eventCallback: (event) => {
+              if (event.name === "checkout.completed") {
+                window.isPaymentDone = true;
+                toast.success("Payment Successful! Redirecting...");
+              }
+            },
+            onCheckoutClosed: () => {
+              if (window.isPaymentDone) {
+                dispatch(fetchCart({ getToken }));
+                window.location.assign("/orders");
+              }
+            }
+          });
+        }
+      } else {
+        // ✅ COD ke liye simple redirect aur cart clear
+        router.push("/orders");
+        dispatch(fetchCart({ getToken }));
+      }
+      return { data, method: paymentMethod }; // Method pass kar rahe hain toast control karne ke liye
+    };
+
+    toast.promise(placeOrderPromise(), {
+      loading: "Placing your order...",
+      success: (res) => {
+        // ✅ Agar method PADDLE hai toh null return karein (koi toast nahi dikhega)
+        // ✅ Agar COD hai toh success message dikhega
+        return res.method === "COD" ? "Order placed successfully! 🎉" : null;
+      },
+      error: (err) => err.response?.data?.error || "Failed to place order.",
+    });
+  } catch (error) {
+    toast.error(error.message);
+  }
+};
 
   return (
     <div className="w-full max-w-lg lg:max-w-[340px] bg-slate-50/30 border border-slate-200 text-slate-500 text-sm rounded-xl p-7">
