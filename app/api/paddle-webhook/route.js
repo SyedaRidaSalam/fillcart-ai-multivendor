@@ -15,7 +15,7 @@ export async function POST(req) {
     if (eventType === "transaction.completed" || eventType === "transaction.paid") {
       
       // Order IDs jo humne frontend se bheji thi (customData mein)
-      const orderIds = customData.orderIds.split(',').map(id => parseInt(id));
+      const orderIds = customData.orderIds.split(',').map(id => id.trim());
 
       // Database mein orders ko "Paid" mark karna
       await prisma.order.updateMany({

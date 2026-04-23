@@ -75,12 +75,12 @@ const OrderSummary = ({ totalPrice, items }) => {
   }, []);
 
   // ✅ Paddle Initialize (Design par zero effect)
-useEffect(() => {
-  initializePaddle({
-    environment: "sandbox", 
-    token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
-  }).then((instance) => setPaddle(instance));
-}, []);
+  useEffect(() => {
+    initializePaddle({
+      environment: "sandbox",
+      token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
+    }).then((instance) => setPaddle(instance));
+  }, []);
 
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
@@ -106,11 +106,12 @@ useEffect(() => {
         // 2. Agar "PADDLE" selected hai toh checkout kholien
         if (paymentMethod === "PADDLE") {
           if (paddle) {
+            // handlePlaceOrder ke andar jahan paddle.Checkout.open hai
             paddle.Checkout.open({
               settings: {
                 displayMode: "overlay",
                 theme: "light",
-                successUrl: `${window.location.origin}/orders`,
+                // successUrl: ... ko yahan se HATA dein (ye issue karta hai)
               },
               items: [
                 {
@@ -121,6 +122,22 @@ useEffect(() => {
               customData: {
                 orderIds: data.orderIds.join(","),
                 userId: user.id,
+              },
+              // ✅ Ye naya event handler add karein
+              eventCallback: (event) => {
+                if (event.name === "checkout.completed") {
+                  toast.success(
+                    "Payment Received! Your order is being processed. 🚀",
+                    {
+                      duration: 5000,
+                      icon: "✅",
+                    },
+                  );
+                  dispatch(fetchCart({ getToken })); // Cart saaf karne ke liye
+                  setTimeout(() => {
+                    router.push("/orders?success=true"); // Query param add kar rahe hain refresh trigger karne ke liye
+                  }, 3000);
+                }
               },
             });
           }
