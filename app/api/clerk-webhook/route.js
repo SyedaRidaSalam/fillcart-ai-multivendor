@@ -169,14 +169,18 @@ export async function POST(req) {
   }
 
   try {
-    // --- FIXED NAME LOGIC ---
-    // Clerk data se first aur last name ko join karke full name banaya
+    // --- FIXED NAME LOGIC (No changes to original structure, just added a safety check) ---
     const firstName = evt.data.first_name || evt.data.payer?.first_name || "";
     const lastName = evt.data.last_name || evt.data.payer?.last_name || "";
-    const fullName = `${firstName} ${lastName}`.trim() || "New User";
-    
-    // Sahi email address nikalna
     const email = evt.data.email_addresses?.[0]?.email_address || evt.data.payer?.email || "sync@user.com";
+    
+    // Yahan check karega: agar name "null null" ban raha hai toh email handle use karega
+    let fullName = `${firstName} ${lastName}`.trim();
+    
+    if (!fullName || fullName === "" || fullName === "null null") {
+      fullName = email.split('@')[0]; // Example: bc210207459
+    }
+    
     const imageUrl = evt.data.image_url || "";
 
     // Default values for Plan
@@ -190,18 +194,18 @@ export async function POST(req) {
       }
     }
 
-    // ✅ NEON DATABASE SYNC (Updated with fullName)
+    // ✅ NEON DATABASE SYNC
     await prisma.user.upsert({
       where: { id: userId },
       update: { 
-        name: fullName !== "" ? fullName : undefined, // Agar name mil raha hai toh update karein
+        name: fullName, // Force update correct name
         image: imageUrl,
         ...(isSubscriptionEvent && { plan: planToSet })
       },
       create: {
         id: userId,
         plan: "free",
-        name: fullName, // 👈 Ab yahan "New User" hardcoded nahi balki actual name jayega
+        name: fullName, 
         email: email,
         image: imageUrl,
       },
