@@ -27,7 +27,8 @@ const OrderSummary = ({ totalPrice, items }) => {
   const [paddle, setPaddle] = useState(null);
   const [dbPlan, setDbPlan] = useState("free");
 
-  const isPaid = useRef(false);
+  // ✅ Track if the user clicked "Pay" to avoid unwanted refreshes
+  const checkoutOpened = useRef(false);
 
   useEffect(() => {
     const fetchUserPlan = async () => {
@@ -69,16 +70,21 @@ const OrderSummary = ({ totalPrice, items }) => {
         couponCode: coupon?.code || null,
       };
 
-      // 1. Order Register Karein
+      // 1. Register order in DB
       const { data } = await axios.post("/api/orders", orderData, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (paymentMethod === "PADDLE" && paddle) {
-        isPaid.current = false; 
+        checkoutOpened.current = true;
 
         paddle.Checkout.open({
-          settings: { displayMode: "overlay", theme: "light" },
+          settings: { 
+            displayMode: "overlay", 
+            theme: "light",
+            // ✅ SUCCESS URL: Paddle payment ke baad is par bhejega, wahan se cart empty ho jayega automatically
+            successUrl: window.location.origin + "/orders"
+          },
           items: [{
             priceId: "pri_01kpy9dt32f9ezc1wdnznhdhdk",
             quantity: Math.round(finalTotal),
@@ -88,16 +94,17 @@ const OrderSummary = ({ totalPrice, items }) => {
             userId: user.id,
           },
           eventCallback: async (event) => {
-            // ✅ Payment Success Check
+            console.log("Paddle Event:", event.name);
+            // ✅ Agar event mil gaya toh cart foran refresh
             if (event.name === "checkout.completed" || event.name === "transaction.completed") {
-              isPaid.current = true;
               await dispatch(fetchCart({ getToken }));
               router.push("/orders");
             }
           },
           onCheckoutClosed: async () => {
-            // ✅ Sirf success pe refresh, warna user Summary page par hi rahega
-            if (isPaid.current) {
+            // ✅ LAST RESORT: Agar user ne window band ki aur checkout open hua tha, 
+            // toh cart refresh maaro taake "empty" dikhe kyunki order already backend pe ban chuka hai.
+            if (checkoutOpened.current) {
               await dispatch(fetchCart({ getToken }));
               router.push("/orders");
               router.refresh();
@@ -105,7 +112,7 @@ const OrderSummary = ({ totalPrice, items }) => {
           },
         });
       } else {
-        // ✅ COD FLOW
+        // ✅ COD Flow (Working Fine)
         await dispatch(fetchCart({ getToken }));
         router.push("/orders");
         toast.success("Order registered successfully! 🎉");
@@ -126,16 +133,17 @@ const OrderSummary = ({ totalPrice, items }) => {
       </div>
 
       <p className="text-slate-400 text-xs my-4">Payment Method</p>
-      <div className="flex gap-2 items-center">
-        <input type="radio" name="payment" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} />
-        <label>Cash on Delivery (COD)</label>
-      </div>
-      <div className="flex gap-2 items-center mt-1">
-        <input type="radio" name="payment" checked={paymentMethod === "PADDLE"} onChange={() => setPaymentMethod("PADDLE")} />
-        <label>Online Payment (Paddle)</label>
+      <div className="space-y-2">
+        <div className="flex gap-2 items-center">
+          <input type="radio" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} />
+          <label>Cash on Delivery (COD)</label>
+        </div>
+        <div className="flex gap-2 items-center">
+          <input type="radio" checked={paymentMethod === "PADDLE"} onChange={() => setPaymentMethod("PADDLE")} />
+          <label>Online Payment (Paddle)</label>
+        </div>
       </div>
 
-      {/* ✅ RESTORED FULL ADDRESS DISPLAY */}
       <div className="my-4 py-4 border-y border-slate-200 text-slate-400">
         <p>Address</p>
         {selectedAddress ? (
