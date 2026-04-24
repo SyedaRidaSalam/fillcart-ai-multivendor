@@ -75,6 +75,19 @@ const OrderSummary = ({ totalPrice, items }) => {
       token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
     }).then((instance) => setPaddle(instance));
   }, []);
+  useEffect(() => {
+  const url = new URL(window.location.href);
+
+  // agar tum custom param bhejo ya future me add karo
+  const paymentSuccess = url.searchParams.get("payment");
+
+  if (paymentSuccess === "success") {
+    (async () => {
+      await dispatch(fetchCart({ getToken }));
+      router.push("/orders");
+    })();
+  }
+}, []);
 
 
 
@@ -128,16 +141,14 @@ eventCallback: (event) => {
 
 onCheckoutClosed: async () => {
   setTimeout(async () => {
-    if (paymentSuccessfulRef.current) {
-      toast.success("Payment Successful!");
 
-      await dispatch(fetchCart({ getToken })); // 👈 await important
+    // 🔥 ALWAYS run (no dependency on event)
+    await dispatch(fetchCart({ getToken }));
 
-      router.push("/orders"); // 👈 redirect
-    } else {
-      toast.info("Payment cancelled. Your items are still in the cart.");
-    }
-  }, 800); // 👈 delay important
+    // 🔥 force refresh + redirect
+    window.location.href = "/orders";
+
+  }, 1000);
 },
           });
         }
