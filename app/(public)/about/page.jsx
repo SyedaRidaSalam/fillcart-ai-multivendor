@@ -1,44 +1,59 @@
 import React from 'react';
+import Link from 'next/link';
+import { Rocket, ShieldCheck, Cpu } from 'lucide-react';
 
 const AboutPage = () => {
   return (
-    <div className="bg-white min-h-screen py-16 px-6 sm:px-12 lg:px-24">
+    <div className="bg-slate-50 min-h-screen py-20 px-6">
       <div className="max-w-5xl mx-auto">
-        <h1 className="text-4xl font-extrabold text-gray-900 mb-6 text-center">
-          About <span className="text-blue-600">FillCart</span>
-        </h1>
-        <p className="text-lg text-gray-600 mb-12 text-center leading-relaxed">
-          Welcome to FillCart, your premier destination for a smart, seamless, and AI-driven shopping experience. 
-          We are more than just a marketplace; we are a technology-first platform designed to bridge the gap 
-          between high-quality vendors and tech-savvy consumers.
-        </p>
-
-        <div className="grid md:grid-cols-2 gap-12 mt-12">
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-800">Our Vision</h2>
-            <p className="text-gray-600">
-              At FillCart, we leverage cutting-edge Full Stack architecture and AI workflows to simplify 
-              online commerce. From lightning-fast interfaces to personalized recommendations powered by 
-              the Gemini API, every detail is engineered for efficiency.
-            </p>
-          </div>
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-800">Why FillCart?</h2>
-            <ul className="list-disc list-inside text-gray-600 space-y-2">
-              <li>Scalable Next.js & MERN Stack for a smooth experience.</li>
-              <li>Secure transactions integrated with Paddle.</li>
-              <li>AI-powered insights for smarter shopping.</li>
-              <li>Verified multi-vendor ecosystem ensuring quality.</li>
-            </ul>
-          </div>
+        
+        {/* Branding Header */}
+        <div className="text-center mb-16">
+          <Link href="/" className="text-5xl font-semibold text-slate-700 inline-block mb-4">
+            <span className="text-green-600">Fill</span>Cart<span className="text-green-600 text-6xl leading-0">.</span>
+          </Link>
+          <h1 className="text-3xl font-bold text-slate-800 mt-4">Next-Gen AI Commerce</h1>
         </div>
 
-        <div className="mt-20 bg-gray-50 p-10 rounded-2xl border border-gray-100">
-          <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">Our Mission</h2>
-          <p className="text-center text-gray-600 max-w-3xl mx-auto italic">
-            "To revolutionize the way people shop by integrating artificial intelligence and modern 
-            software engineering into every interaction, making eCommerce faster, safer, and more intuitive."
-          </p>
+        {/* Content Cards */}
+        <div className="grid gap-8">
+          <div className="bg-white p-10 rounded-3xl border border-slate-100 shadow-sm">
+            <div className="flex items-center gap-4 mb-6">
+              <Rocket className="text-green-600" size={32} />
+              <h2 className="text-2xl font-bold text-slate-800">Our Vision</h2>
+            </div>
+            <p className="text-slate-600 leading-relaxed text-lg">
+              FillCart is a premium multi-vendor marketplace engineered for speed and intelligence. 
+              Built with the modern MERN stack and Next.js, we provide a seamless bridge between 
+              innovative vendors and global consumers. Our platform isn't just about selling; 
+              it's about creating a tech-driven ecosystem where every transaction is optimized.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+              <div className="flex items-center gap-4 mb-4">
+                <Cpu className="text-green-600" size={28} />
+                <h3 className="text-xl font-bold text-slate-800">The Technology</h3>
+              </div>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                We leverage Clerk for ultra-secure authentication and Neon DB for high-performance 
+                data handling. Our AI-driven summarization ensures you get the best product 
+                insights in seconds.
+              </p>
+            </div>
+
+            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+              <div className="flex items-center gap-4 mb-4">
+                <ShieldCheck className="text-green-600" size={28} />
+                <h3 className="text-xl font-bold text-slate-800">Secure Payments</h3>
+              </div>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                With integrated Paddle support for international transactions and reliable 
+                Cash on Delivery (COD) options, your financial security is our top priority.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -160,7 +160,7 @@ const OrderSummary = ({ totalPrice, items }) => {
                 <option>Select Address</option>
                 {addressList.map((a, i) => (
                   <option key={i} value={i}>
-                    {a.name}, {a.city}, {a.state}, {a.zip}
+                    {a.name}, {a.city}, {a.state}, {a.zip}, {a.addressLine},{a.phone},{a.country}
                   </option>
                 ))}
               </select>

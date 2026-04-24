@@ -1,50 +1,60 @@
 import React from 'react';
+import Link from 'next/link';
+import { Lock, EyeOff, FileText } from 'lucide-react';
 
 const PrivacyPolicy = () => {
+  const policies = [
+    {
+      icon: <Lock size={24} />,
+      title: "Data Security",
+      text: "We use Clerk for user authentication. Your passwords and sensitive data are encrypted and never stored directly on our servers."
+    },
+    {
+      icon: <EyeOff size={24} />,
+      title: "No Third-Party Selling",
+      text: "FillCart does not sell your personal information to marketing agencies. Your data is used strictly for order fulfillment and AI optimization."
+    },
+    {
+      icon: <FileText size={24} />,
+      title: "Payment Processing",
+      text: "All online payments are handled by Paddle. We do not store credit card details. COD orders are verified via your registered contact info."
+    }
+  ];
+
   return (
-    <div className="bg-gray-50 min-h-screen py-16 px-6">
-      <div className="max-w-4xl mx-auto bg-white p-8 md:p-12 rounded-xl shadow-sm border border-gray-200">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Privacy Policy</h1>
-        <p className="text-sm text-gray-500 mb-8">Last Updated: April 2026</p>
+    <div className="bg-slate-50 min-h-screen py-20 px-6">
+      <div className="max-w-4xl mx-auto">
+        
+        {/* Branding Header */}
+        <div className="text-center mb-16">
+          <Link href="/" className="text-5xl font-semibold text-slate-700 inline-block mb-4">
+            <span className="text-green-600">Fill</span>Cart<span className="text-green-600 text-6xl leading-0">.</span>
+          </Link>
+          <h1 className="text-2xl font-bold text-slate-800">Privacy & Security Framework</h1>
+          <p className="text-slate-500 text-sm mt-2 font-mono">VERSION 2026.01</p>
+        </div>
 
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">1. Introduction</h2>
-          <p className="text-gray-600 leading-relaxed">
-            At <strong>FillCart</strong>, we respect your privacy and are committed to protecting your personal data. 
-            This policy explains how we handle your information when you visit our platform or make a purchase.
+        {/* Policy Cards */}
+        <div className="space-y-6">
+          {policies.map((p, index) => (
+            <div key={index} className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm flex gap-6 items-start">
+              <div className="bg-green-50 p-3 rounded-xl text-green-600">
+                {p.icon}
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 mb-2">{p.title}</h3>
+                <p className="text-slate-500 text-sm leading-relaxed">{p.text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-12 p-8 bg-slate-800 rounded-3xl text-slate-300 text-center">
+          <p className="text-sm italic">
+            "At FillCart, we believe privacy is a fundamental right. Our engineering team constantly monitors 
+            our Neon DB clusters and Clerk webhooks to ensure your shopping experience remains private."
           </p>
-        </section>
-
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">2. Data We Collect</h2>
-          <ul className="list-disc list-inside text-gray-600 space-y-2">
-            <li><strong>Personal Information:</strong> Name, email, shipping address, and phone number provided during checkout.</li>
-            <li><strong>Payment Data:</strong> All payments are processed via <strong>Paddle</strong>. We do not store your credit card details on our servers.</li>
-            <li><strong>Technical Data:</strong> IP addresses and browser cookies to maintain your shopping cart and session.</li>
-          </ul>
-        </section>
-
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">3. How We Use Your Data</h2>
-          <p className="text-gray-600">
-            We use your data strictly to process orders, manage your account, provide customer support, 
-            and improve our AI-driven recommendation engine. We never sell your data to third-party marketers.
-          </p>
-        </section>
-
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">4. Security</h2>
-          <p className="text-gray-600">
-            Your data is stored securely using cloud-based Neon DB and encrypted communication protocols. 
-            By using FillCart, you consent to our use of industry-standard security measures to keep your info safe.
-          </p>
-        </section>
-
-        <section className="mt-12 pt-6 border-t border-gray-100">
-          <p className="text-gray-500 text-sm">
-            For any questions regarding this policy, please contact our support team at <span className="text-blue-600">support@fillcart.com</span>.
-          </p>
-        </section>
+        </div>
       </div>
     </div>
   );
