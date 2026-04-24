@@ -86,8 +86,10 @@ const OrderSummary = ({ totalPrice, items }) => {
 
 const handlePlaceOrder = async (e) => {
   e.preventDefault();
-  // Hum ref ko use karne ke bajaye direct logic callback mein dalenge
   
+  // Ek local variable banayein jo sirf is function execution tak rahe
+  let paymentSuccessful = false;
+
   try {
     if (!user) return toast.error("Please login to place an order");
     if (!selectedAddress) return toast.error("Please select an address");
@@ -122,25 +124,23 @@ const handlePlaceOrder = async (e) => {
               userId: user.id,
             },
             eventCallback: (event) => {
-              console.log("Paddle Event:", event.name);
-
-              // ✅ JAISE HI PAYMENT SUCCESSFUL HO
+              // ✅ Sirf payment confirm hone par flag true karein
               if (event.name === "checkout.completed" || event.name === "transaction.completed") {
-                
-                // 1. Foran Cart saaf karo (Background mein)
+                paymentSuccessful = true;
+                toast.success("Payment Successful! Processing your order...");
+              }
+            },
+            onCheckoutClosed: () => {
+              // ✅ Jab user MODAL CLOSE kare (Cross click kare)
+              if (paymentSuccessful) {
+                // 1. Ab cart khali karein kyunki payment ho chuki hai
                 dispatch(fetchCart({ getToken }));
-
-                // 2. Sweet message dikhao
-                toast.success("Payment Successful! Redirecting to orders...", {
-                  duration: 3000,
-                  icon: "✅"
-                });
-
-                // 3. 2 second ka wait taake webhook DB update karde, phir seedha redirect
-                // Hum Cross click karne ka intezar NAHI karenge
-                setTimeout(() => {
-                  window.location.href = "/orders";
-                }, 2500);
+                // 2. My Orders page par bhej dein
+                window.location.href = "/orders";
+              } else {
+                // Agar payment nahi hui aur user ne close kiya, toh kuch nahi hoga
+                // Cart waisa hi bhara rahega.
+                toast.info("Payment cancelled. Your items are still in the cart.");
               }
             }
           });
