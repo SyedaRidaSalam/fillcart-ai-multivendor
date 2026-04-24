@@ -27,7 +27,6 @@ const OrderSummary = ({ totalPrice, items }) => {
   const [paddle, setPaddle] = useState(null);
   const [dbPlan, setDbPlan] = useState("free");
 
-  // ✅ Track if the user clicked "Pay" to avoid unwanted refreshes
   const checkoutOpened = useRef(false);
 
   useEffect(() => {
@@ -46,6 +45,7 @@ const OrderSummary = ({ totalPrice, items }) => {
 
   const isPlus = dbPlan === "plus";
   const shippingFee = isPlus ? 0 : 5;
+
   const discountAmount = coupon ? (coupon.discount / 100) * totalPrice : 0;
   const finalTotal = totalPrice - discountAmount + shippingFee;
 
@@ -56,26 +56,45 @@ const OrderSummary = ({ totalPrice, items }) => {
     }).then((instance) => setPaddle(instance));
   }, []);
 
-const handlePlaceOrder = async (e) => {
+  const handleCouponCode = async (event) => {
+    event.preventDefault();
+    try {
+      if (!user) return toast.error("Please login first");
+      const { data } = await axios.post("/api/coupon", {
+        code: couponCodeInput,
+      });
+      setCoupon(data.coupon);
+      toast.success("Coupon applied!");
+    } catch (error) {
+      toast.error(error.response?.data?.error || error.message);
+    }
+  };
+
+  const handlePlaceOrder = async (e) => {
     e.preventDefault();
     if (!user) return toast.error("Please login to place an order");
     if (!selectedAddress) return toast.error("Please select an address");
 
-    try {
-      const token = await getToken();
-      const orderData = {
-        addressId: selectedAddress.id,
-        items,
-        paymentMethod,
-        couponCode: coupon?.code || null,
-      };
+    // ✅ PADDLE CASE: Order creation happens first so DB is updated
+    if (paymentMethod === "PADDLE") {
+      if (!paddle) return toast.error("Payment gateway not ready");
+      
+      const loadingToast = toast.loading("Preparing your order...");
+      try {
+        const token = await getToken();
+        const orderData = {
+          addressId: selectedAddress.id,
+          items,
+          paymentMethod,
+          couponCode: coupon?.code || null,
+        };
 
-      // 1. Register order in DB
-      const { data } = await axios.post("/api/orders", orderData, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+        // Create Order in DB (backend should mark as isPaid: false initially or handle via webhook)
+        const { data } = await axios.post("/api/orders", orderData, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
-      if (paymentMethod === "PADDLE" && paddle) {
+        toast.dismiss(loadingToast);
         checkoutOpened.current = true;
 
         paddle.Checkout.open({
@@ -93,35 +112,45 @@ const handlePlaceOrder = async (e) => {
             userId: user.id,
           },
           eventCallback: async (event) => {
-            console.log("Paddle Event:", event.name);
+            // ✅ Payment complete hone par hi cart khali hogi aur redirect hoga
             if (event.name === "checkout.completed" || event.name === "transaction.completed") {
-              // ✅ Success Toast for Paddle
-              toast.success("Order placed successfully! 🥳 Hurray!", { duration: 5000 });
-              
+              toast.success("Payment Successful! 🎉");
               await dispatch(fetchCart({ getToken }));
               router.push("/orders");
-            }
-          },
-          onCheckoutClosed: async () => {
-            if (checkoutOpened.current) {
-              await dispatch(fetchCart({ getToken }));
-              router.push("/orders");
-              router.refresh();
             }
           },
         });
-      } else {
-        // ✅ COD Flow
-        await dispatch(fetchCart({ getToken }));
-        
-        // ✅ Success Toast for COD
-        toast.success("Order placed successfully! 🥳 Hurray!", { duration: 5000 });
-        
-        router.push("/orders");
+      } catch (error) {
+        toast.dismiss(loadingToast);
+        toast.error(error.response?.data?.error || "Failed to initiate order.");
       }
-    } catch (error) {
-      toast.error(error.response?.data?.error || "Failed to place order.");
+      return;
     }
+
+    // ✅ COD CASE
+    const placeOrderPromise = async () => {
+      const token = await getToken();
+      const orderData = {
+        addressId: selectedAddress.id,
+        items,
+        paymentMethod,
+        couponCode: coupon?.code || null,
+      };
+
+      const { data } = await axios.post("/api/orders", orderData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      await dispatch(fetchCart({ getToken }));
+      router.push("/orders");
+      return data;
+    };
+
+    toast.promise(placeOrderPromise(), {
+      loading: "Processing your order...",
+      success: "Order placed successfully! 🎉",
+      error: (err) => err.response?.data?.error || "Failed to place order.",
+    });
   };
 
   return (
@@ -134,41 +163,37 @@ const handlePlaceOrder = async (e) => {
         </span>
       </div>
 
-      <p className="text-slate-400 text-xs my-4">Payment Method</p>
+      <p className="text-slate-400 text-xs my-4 font-medium uppercase">Payment Method</p>
       <div className="space-y-2">
         <div className="flex gap-2 items-center">
-          <input type="radio" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} />
-          <label>Cash on Delivery (COD)</label>
+          <input type="radio" id="cod" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} />
+          <label htmlFor="cod" className="cursor-pointer">COD (Cash on Delivery)</label>
         </div>
         <div className="flex gap-2 items-center">
-          <input type="radio" checked={paymentMethod === "PADDLE"} onChange={() => setPaymentMethod("PADDLE")} />
-          <label>Online Payment (Paddle)</label>
+          <input type="radio" id="paddle" checked={paymentMethod === "PADDLE"} onChange={() => setPaymentMethod("PADDLE")} />
+          <label htmlFor="paddle" className="cursor-pointer">Online Payment (Paddle)</label>
         </div>
       </div>
 
       <div className="my-4 py-4 border-y border-slate-200 text-slate-400">
-        <p>Address</p>
+        <p className="text-xs uppercase font-medium mb-2">Address</p>
         {selectedAddress ? (
-          <div className="flex gap-2 items-center">
-            <p>
-              {selectedAddress.name}, {selectedAddress.city}, {selectedAddress.state}, {selectedAddress.zip}
-            </p>
-            <SquarePenIcon onClick={() => setSelectedAddress(null)} size={18} className="cursor-pointer" />
+          <div className="flex gap-2 items-center text-slate-700">
+            <p className="text-xs">{selectedAddress.name}, {selectedAddress.city}</p>
+            <SquarePenIcon onClick={() => setSelectedAddress(null)} size={18} className="cursor-pointer text-slate-400" />
           </div>
         ) : (
           <div>
             {addressList.length > 0 && (
-              <select className="border p-2 w-full my-3 rounded" onChange={(e) => setSelectedAddress(addressList[e.target.value])}>
-                <option>Select Address</option>
+              <select className="border p-2 w-full my-2 rounded bg-white text-slate-600" onChange={(e) => setSelectedAddress(addressList[e.target.value])}>
+                <option value="">Select Address</option>
                 {addressList.map((a, i) => (
-                  <option key={i} value={i}>
-                    {a.name}, {a.city}, {a.state}, {a.zip}, {a.addressLine},{a.phone},{a.country}
-                  </option>
+                  <option key={i} value={i}>{a.name}, {a.city}</option>
                 ))}
               </select>
             )}
-            <button onClick={() => setShowAddressModal(true)} className="flex items-center gap-1">
-              Add Address <PlusIcon size={18} />
+            <button onClick={() => setShowAddressModal(true)} className="flex items-center gap-1 text-xs mt-1">
+              Add Address <PlusIcon size={16} />
             </button>
           </div>
         )}
@@ -176,12 +201,12 @@ const handlePlaceOrder = async (e) => {
 
       <div className="pb-4 border-b">
         <div className="flex justify-between">
-          <div className="text-slate-400">
+          <div className="text-slate-400 space-y-1">
             <p>Subtotal:</p>
             <p>Shipping:</p>
-            {coupon && <p>Coupon ({coupon.code}):</p>}
+            {coupon && <p className="text-green-600 italic">Coupon ({coupon.code}):</p>}
           </div>
-          <div className="text-right font-medium">
+          <div className="text-right font-medium space-y-1 text-slate-700">
             <p>{currency}{Number(totalPrice).toFixed(2)}</p>
             <p className={isPlus ? "text-green-600" : ""}>
               {isPlus ? "FREE" : `${currency}${shippingFee.toFixed(2)}`}
@@ -191,12 +216,32 @@ const handlePlaceOrder = async (e) => {
         </div>
       </div>
 
+      {!coupon ? (
+        <form onSubmit={(e) => toast.promise(handleCouponCode(e), { loading: "Checking..." })} className="flex gap-2 mt-3">
+          <input
+            value={couponCodeInput}
+            onChange={(e) => setCouponCodeInput(e.target.value)}
+            placeholder="Coupon Code"
+            className="border p-2 w-full rounded outline-none text-slate-700"
+          />
+          <button className="bg-slate-600 text-white px-3 rounded text-xs">Apply</button>
+        </form>
+      ) : (
+        <div className="flex justify-between items-center bg-green-50 p-2 mt-2 rounded border border-green-200">
+          <div>
+            <p className="font-bold text-green-700 text-xs">{coupon.code}</p>
+            <p className="text-[10px] text-green-600">{coupon.description}</p>
+          </div>
+          <XIcon onClick={() => setCoupon("")} size={16} className="text-green-700 cursor-pointer" />
+        </div>
+      )}
+
       <div className="flex justify-between py-4 text-lg">
         <p className="text-slate-600 font-bold">Total:</p>
         <p className="font-bold text-slate-800">{currency}{finalTotal.toFixed(2)}</p>
       </div>
 
-      <button onClick={handlePlaceOrder} className="w-full bg-slate-700 hover:bg-slate-800 text-white py-3 rounded-xl transition-all">
+      <button onClick={handlePlaceOrder} className="w-full bg-slate-700 hover:bg-slate-800 text-white py-3 rounded-xl transition-all font-bold">
         Place Order
       </button>
 

@@ -21,7 +21,7 @@ model User {
   store       Store?
 
     // 🔥 ADD THIS
-  plan        String    @default("Free")
+  plan        String    @default("free")
 }
 
 model Product {

@@ -181,18 +181,19 @@ export async function POST(req) {
       planToSet = (status === "active" || status === "trialing") ? "plus" : "free";
     }
 
-    // --- 3. NEON DATABASE SYNC ---
+ 
+// --- 3. NEON DATABASE SYNC ---
     await prisma.user.upsert({
       where: { id: userId },
       update: { 
         name: fullName,
         image: evt.data.image_url || "",
-        // STRICT: Plan sirf tabhi update hoga jab subscription event aaye
-        ...(planToSet !== undefined && { plan: planToSet })
+        // STRICT: Plan tabhi badle jab event subscription ka ho AUR planToSet define ho
+        ...(isSubscriptionEvent && planToSet !== undefined ? { plan: planToSet } : {})
       },
       create: {
         id: userId,
-        plan: "free", // 👈 Naya user HAMESHA free hoga
+        plan: "free", // Naya user hamesha free
         name: fullName,
         email: email,
         image: evt.data.image_url || "",

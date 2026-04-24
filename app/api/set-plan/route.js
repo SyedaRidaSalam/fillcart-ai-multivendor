@@ -8,26 +8,30 @@ const clerkClient = createClerkClient({
   secretKey: process.env.CLERK_SECRET_KEY,
 });
 
+// /api/upgrade-plan/route.js
 export async function POST(req) {
   try {
     const { userId } = getAuth(req);
+    const { paddleTransactionId } = await req.json(); // Transaction ID lazmi mangwaein
+
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    // 1. Clerk Metadata Update (Frontend ke liye)
+    // 🛑 AGAR PADDLE TRANSACTION ID NAHI HAI TO UPGRADE NA KAREIN
+    if (!paddleTransactionId) {
+       return NextResponse.json({ error: "Payment verification failed" }, { status: 400 });
+    }
+
     await clerkClient.users.updateUser(userId, {
       publicMetadata: { plan: "plus" },
     });
 
-    // 2. Neon Database Update (Backend/Coupon API ke liye)
-    // Hum "plus" lowercase mein save karenge
     await prisma.user.update({
       where: { id: userId },
       data: { plan: "plus" },
     });
 
-    return NextResponse.json({ message: "Success! DB updated to plus" });
+    return NextResponse.json({ message: "Success! Upgraded to plus" });
   } catch (error) {
-    console.error("NEON_UPDATE_ERROR:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
