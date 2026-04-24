@@ -80,7 +80,7 @@ const Footer = () => {
                     </div>
                 </div>
                 <p className="py-4 text-sm text-slate-500">
-                    Copyright 2025 © FillCart All Right Reserved.
+                    Copyright 2026 © FillCart All Right Reserved.
                 </p>
             </div>
         </footer>
