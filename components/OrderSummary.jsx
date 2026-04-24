@@ -26,10 +26,8 @@ const OrderSummary = ({ totalPrice, items }) => {
   const [paddle, setPaddle] = useState(null);
   const [dbPlan, setDbPlan] = useState("free");
 
-  const isPlus = dbPlan === "plus";
-  const shippingFee = isPlus ? 0 : 5;
-  const discountAmount = coupon ? (coupon.discount / 100) * totalPrice : 0;
-  const finalTotal = totalPrice - discountAmount + shippingFee;
+  // ✅ Track payment status without re-rendering
+  const isPaid = useRef(false);
 
   useEffect(() => {
     const fetchUserPlan = async () => {
@@ -45,6 +43,11 @@ const OrderSummary = ({ totalPrice, items }) => {
     fetchUserPlan();
   }, [user?.id]);
 
+  const isPlus = dbPlan === "plus";
+  const shippingFee = isPlus ? 0 : 5;
+  const discountAmount = coupon ? (coupon.discount / 100) * totalPrice : 0;
+  const finalTotal = totalPrice - discountAmount + shippingFee;
+
   useEffect(() => {
     initializePaddle({
       environment: "sandbox",
@@ -54,8 +57,8 @@ const OrderSummary = ({ totalPrice, items }) => {
 
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
-    if (!user) return toast.error("Please login to place an order");
-    if (!selectedAddress) return toast.error("Please select an address");
+    if (!user) return toast.error("Please login");
+    if (!selectedAddress) return toast.error("Please select address");
 
     try {
       const token = await getToken();
@@ -66,15 +69,18 @@ const OrderSummary = ({ totalPrice, items }) => {
         couponCode: coupon?.code || null,
       };
 
+      // 1. Order create backend pe
       const { data } = await axios.post("/api/orders", orderData, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (paymentMethod === "PADDLE" && paddle) {
+        isPaid.current = false; // Reset before opening
+
         paddle.Checkout.open({
           settings: { displayMode: "overlay", theme: "light" },
           items: [{
-            priceId: "pri_01kpy9dt32f9ezc1wdnznhdhdk", // Ensure this is your correct Sandbox Price ID
+            priceId: "pri_01kpy9dt32f9ezc1wdnznhdhdk",
             quantity: Math.round(finalTotal),
           }],
           customData: {
@@ -82,44 +88,48 @@ const OrderSummary = ({ totalPrice, items }) => {
             userId: user.id,
           },
           eventCallback: async (event) => {
-            console.log("Paddle Event:", event.name);
-            
-            // ✅ SUCCESS logic: Jab payment confirm ho jaye
+            // ✅ Check for success events
             if (event.name === "checkout.completed" || event.name === "transaction.completed") {
-              toast.success("Payment Successful!");
+              isPaid.current = true; 
+              console.log("Payment Confirmed in Callback");
               
-              // 1. Foran Cart fetch karein (Backend se cart khali ho chuka hoga order api ki wajah se)
+              // Immediate action
               await dispatch(fetchCart({ getToken }));
-              
-              // 2. Direct Redirect (Wait mat karo checkout close hone ka)
               router.push("/orders");
-              router.refresh();
             }
           },
-          onCheckoutClosed: () => {
-            console.log("Checkout closed by user");
+          onCheckoutClosed: async () => {
+            // ✅ Sirf tab refresh/redirect karein agar payment confirm hui ho
+            if (isPaid.current) {
+              await dispatch(fetchCart({ getToken }));
+              router.push("/orders");
+              router.refresh();
+            } else {
+              toast.error("Payment was not completed.");
+            }
           },
         });
       } else {
-        // ✅ COD FLOW (Jo aapne kaha sahi chal raha hai)
+        // COD Flow
         await dispatch(fetchCart({ getToken }));
         router.push("/orders");
-        toast.success("Order placed successfully! 🎉");
+        toast.success("Order Placed! 🎉");
       }
     } catch (error) {
-      toast.error(error.response?.data?.error || "Something went wrong");
+      toast.error(error.response?.data?.error || "Order failed");
     }
   };
 
-  // --- UI REMAINS EXACTLY SAME AS PER YOUR REQUEST ---
   return (
     <div className="w-full max-w-lg lg:max-w-[340px] bg-slate-50/30 border border-slate-200 text-slate-500 text-sm rounded-xl p-7">
       <h2 className="text-xl font-medium text-slate-600">Payment Summary</h2>
+      
       <div className="mt-2">
         <span className={`px-2 py-1 rounded-full text-[10px] ${isPlus ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
           Plan: {dbPlan.toUpperCase()}
         </span>
       </div>
+
       <p className="text-slate-400 text-xs my-4">Payment Method</p>
       <div className="space-y-2">
         <div className="flex gap-2 items-center">
@@ -131,6 +141,7 @@ const OrderSummary = ({ totalPrice, items }) => {
           <label>Online Payment (Paddle)</label>
         </div>
       </div>
+
       <div className="my-4 py-4 border-y border-slate-200 text-slate-400">
         <p>Address</p>
         {selectedAddress ? (
@@ -150,6 +161,7 @@ const OrderSummary = ({ totalPrice, items }) => {
           </div>
         )}
       </div>
+
       <div className="pb-4 border-b space-y-1">
         <div className="flex justify-between">
           <span>Subtotal:</span>
@@ -166,13 +178,16 @@ const OrderSummary = ({ totalPrice, items }) => {
           </div>
         )}
       </div>
+
       <div className="flex justify-between py-4 text-lg">
         <p className="text-slate-600 font-bold">Total:</p>
         <p className="font-bold text-slate-800">{currency}{finalTotal.toFixed(2)}</p>
       </div>
+
       <button onClick={handlePlaceOrder} className="w-full bg-slate-700 hover:bg-slate-800 text-white py-3 rounded-xl transition-all">
         Place Order
       </button>
+
       {showAddressModal && <AddressModal setShowAddressModal={setShowAddressModal} />}
     </div>
   );
