@@ -116,7 +116,7 @@ const handlePlaceOrder = async (e) => {
               userId: user.id,
             },
 eventCallback: (event) => {
-  console.log("Paddle Event:", event.name);
+  console.log("Paddle Event:", event.name); // 👈 debug
 
   if (
     event.name === "checkout.completed" ||
@@ -126,19 +126,18 @@ eventCallback: (event) => {
   }
 },
 
-onCheckoutClosed: () => {
-  // 🔥 Delay zaroori hai
-  setTimeout(() => {
+onCheckoutClosed: async () => {
+  setTimeout(async () => {
     if (paymentSuccessfulRef.current) {
       toast.success("Payment Successful!");
 
-      dispatch(fetchCart({ getToken }));
+      await dispatch(fetchCart({ getToken })); // 👈 await important
 
-      router.push("/orders");
+      router.push("/orders"); // 👈 redirect
     } else {
       toast.info("Payment cancelled. Your items are still in the cart.");
     }
-  }, 800); // 👈 important delay
+  }, 800); // 👈 delay important
 },
           });
         }
