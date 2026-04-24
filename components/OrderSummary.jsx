@@ -125,7 +125,11 @@ eventCallback: (event) => {
     toast.success("Payment Successful!");
 
     dispatch(fetchCart({ getToken }));
-    router.push("/orders");
+
+    // 🔥 Delay add karo (IMPORTANT)
+    setTimeout(() => {
+      router.push("/orders");
+    }, 1000);
   }
 },
 
