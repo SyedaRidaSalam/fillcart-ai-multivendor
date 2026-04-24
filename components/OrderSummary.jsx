@@ -116,27 +116,29 @@ const handlePlaceOrder = async (e) => {
               userId: user.id,
             },
 eventCallback: (event) => {
+  console.log("Paddle Event:", event.name);
+
   if (
     event.name === "checkout.completed" ||
     event.name === "transaction.completed"
   ) {
     paymentSuccessfulRef.current = true;
-
-    toast.success("Payment Successful!");
-
-    dispatch(fetchCart({ getToken }));
-
-    // 🔥 Delay add karo (IMPORTANT)
-    setTimeout(() => {
-      router.push("/orders");
-    }, 1000);
   }
 },
 
 onCheckoutClosed: () => {
-  if (!paymentSuccessfulRef.current) {
-    toast.info("Payment cancelled. Your items are still in the cart.");
-  }
+  // 🔥 Delay zaroori hai
+  setTimeout(() => {
+    if (paymentSuccessfulRef.current) {
+      toast.success("Payment Successful!");
+
+      dispatch(fetchCart({ getToken }));
+
+      router.push("/orders");
+    } else {
+      toast.info("Payment cancelled. Your items are still in the cart.");
+    }
+  }, 800); // 👈 important delay
 },
           });
         }
