@@ -1,7 +1,7 @@
 "use client";
 
 import { PlusIcon, SquarePenIcon, XIcon } from "lucide-react";
-import React, { useState, useEffect} from "react";
+import React, { useState, useEffect, useRef} from "react";
 import AddressModal from "./AddressModal";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
@@ -28,6 +28,8 @@ const OrderSummary = ({ totalPrice, items }) => {
 
   // ✅ New State for fresh plan from DB
   const [dbPlan, setDbPlan] = useState("free");
+
+  const paymentSuccessfulRef = useRef(false);
 
   // ✅ Fresh Plan fetch karein Neon DB se
   useEffect(() => {
@@ -79,8 +81,6 @@ const OrderSummary = ({ totalPrice, items }) => {
 const handlePlaceOrder = async (e) => {
   e.preventDefault();
   
-  // Ek local variable banayein jo sirf is function execution tak rahe
-  let paymentSuccessful = false;
 
   try {
     if (!user) return toast.error("Please login to place an order");
@@ -115,26 +115,25 @@ const handlePlaceOrder = async (e) => {
               orderIds: data.orderIds.join(","),
               userId: user.id,
             },
-            eventCallback: (event) => {
-              // ✅ Sirf payment confirm hone par flag true karein
-              if (event.name === "checkout.completed" || event.name === "transaction.completed") {
-                paymentSuccessful = true;
-                toast.success("Payment Successful! Processing your order...");
-              }
-            },
-            onCheckoutClosed: () => {
-              // ✅ Jab user MODAL CLOSE kare (Cross click kare)
-              if (paymentSuccessful) {
-                // 1. Ab cart khali karein kyunki payment ho chuki hai
-                dispatch(fetchCart({ getToken }));
-                // 2. My Orders page par bhej dein
-                window.location.href = "/orders";
-              } else {
-                // Agar payment nahi hui aur user ne close kiya, toh kuch nahi hoga
-                // Cart waisa hi bhara rahega.
-                toast.info("Payment cancelled. Your items are still in the cart.");
-              }
-            }
+eventCallback: (event) => {
+  if (
+    event.name === "checkout.completed" ||
+    event.name === "transaction.completed"
+  ) {
+    paymentSuccessfulRef.current = true;
+
+    toast.success("Payment Successful!");
+
+    dispatch(fetchCart({ getToken }));
+    router.push("/orders");
+  }
+},
+
+onCheckoutClosed: () => {
+  if (!paymentSuccessfulRef.current) {
+    toast.info("Payment cancelled. Your items are still in the cart.");
+  }
+},
           });
         }
       } else {
