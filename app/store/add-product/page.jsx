@@ -29,11 +29,63 @@ export default function StoreAddProduct() {
     category: "",
   });
   const [loading, setLoading] = useState(false);
+  const [aiUsed, setAiUsed] = useState(false);
 
   const { getToken } = useAuth();
 
   const onChangeHandler = (e) => {
     setProductInfo({ ...productInfo, [e.target.name]: e.target.value });
+  };
+
+  const handleImageUpload = async (key, file) => {
+    setImages((prev) => ({ ...prev, [key]: file }));
+
+    if (key === "1" && file && !aiUsed) {
+      {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onloadend = async () => {
+          const base64string = reader.result.split(",")[1];
+          const mimeType = file.type;
+          const token = await getToken();
+          try {
+            await toast.promise(
+              axios.post(
+                "/api/store/ai",
+                { base64Image: base64string, mimeType },
+                {
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                  },
+                },
+              ),
+              {
+                loading: "Analyzing image with AI...",
+                success: (res) => {
+                  const data = res.data;
+                  if (data.name && data.description) {
+                    setProductInfo((prev) => ({
+                      ...prev,
+                      name: data.name,
+                      description: data.description,
+                    }));
+                    setAiUsed(true);
+                    return "AI filed product info 🎉";
+                  }
+                  return "AI couldn not analyze the image";
+                },
+                error: (err) =>
+                  err?.response?.data?.error ||
+                  err.message ||
+                  "AI analysis failed",
+              },
+            );
+          } catch (error) {
+            console.error("AI Error:", error);
+          }
+        };
+      }
+    }
   };
 
   const onSubmitHandler = async (e) => {
@@ -111,7 +163,7 @@ export default function StoreAddProduct() {
               accept="image/*"
               id={`images${key}`}
               onChange={(e) =>
-                setImages({ ...images, [key]: e.target.files[0] })
+                handleImageUpload(key, e.target.files ? e.target.files[0] : null)
               }
               hidden
             />
