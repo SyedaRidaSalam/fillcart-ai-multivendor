@@ -1,7 +1,7 @@
 "use client";
 
 import { PlusIcon, SquarePenIcon, XIcon } from "lucide-react";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect} from "react";
 import AddressModal from "./AddressModal";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
@@ -82,13 +82,12 @@ const OrderSummary = ({ totalPrice, items }) => {
     }).then((instance) => setPaddle(instance));
   }, []);
 
-// Component ke start mein ye ref add karein
-const isPaidRef = useRef(false);
+
 
 const handlePlaceOrder = async (e) => {
   e.preventDefault();
-  isPaidRef.current = false; // Reset on every click
-
+  // Hum ref ko use karne ke bajaye direct logic callback mein dalenge
+  
   try {
     if (!user) return toast.error("Please login to place an order");
     if (!selectedAddress) return toast.error("Please select an address");
@@ -123,24 +122,31 @@ const handlePlaceOrder = async (e) => {
               userId: user.id,
             },
             eventCallback: (event) => {
-              // ✅ Step 1: Payment confirm hote hi ref update karein
-              if (event.name === "checkout.completed" || event.name === "transaction.confirmed") {
-                isPaidRef.current = true;
-                toast.success("Payment Confirmed! Close the window to see your orders.");
-              }
-            },
-            onCheckoutClosed: () => {
-              // ✅ Step 2: Cross (X) pe click hote hi check karein
-              if (isPaidRef.current) {
-                dispatch(fetchCart({ getToken })); // Cart empty
-                // Force redirect using window.location for reliability
-                window.location.href = "/orders"; 
+              console.log("Paddle Event:", event.name);
+
+              // ✅ JAISE HI PAYMENT SUCCESSFUL HO
+              if (event.name === "checkout.completed" || event.name === "transaction.completed") {
+                
+                // 1. Foran Cart saaf karo (Background mein)
+                dispatch(fetchCart({ getToken }));
+
+                // 2. Sweet message dikhao
+                toast.success("Payment Successful! Redirecting to orders...", {
+                  duration: 3000,
+                  icon: "✅"
+                });
+
+                // 3. 2 second ka wait taake webhook DB update karde, phir seedha redirect
+                // Hum Cross click karne ka intezar NAHI karenge
+                setTimeout(() => {
+                  window.location.href = "/orders";
+                }, 2500);
               }
             }
           });
         }
       } else {
-        // ✅ COD Flow: Simple and fast
+        // COD Flow
         dispatch(fetchCart({ getToken }));
         router.push("/orders");
       }
@@ -149,10 +155,7 @@ const handlePlaceOrder = async (e) => {
 
     toast.promise(placeOrderPromise(), {
       loading: "Placing your order...",
-      success: (res) => {
-        // Sirf COD ke liye toast dikhayega
-        return res.method === "COD" ? "Order registered successfully! 🎉" : null;
-      },
+      success: (res) => (res.method === "COD" ? "Order registered successfully! 🎉" : null),
       error: (err) => err.response?.data?.error || "Failed to place order.",
     });
 
