@@ -67,17 +67,10 @@ const OrderSummary = ({ totalPrice, items }) => {
       toast.error(error.response?.data?.error || error.message);
     }
   };
-
- useEffect(() => {
+useEffect(() => {
   initializePaddle({
     environment: "sandbox",
     token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
-    eventCallback: (event) => {
-      // ✅ Payment confirm hote hi state update karein
-      if (event.name === "checkout.completed" || event.name === "transaction.completed") {
-        setPaymentDone(true);
-      }
-    }
   }).then((instance) => setPaddle(instance));
 }, []);
 
@@ -104,12 +97,11 @@ const handlePlaceOrder = async (e) => {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (paymentMethod === "PADDLE" && paddle) {
+     if (paymentMethod === "PADDLE" && paddle) {
         paddle.Checkout.open({
           settings: {
             displayMode: "overlay",
             theme: "light",
-            // ✅ Ye line bahar click karne se modal band nahi hone degi
             closeOnOverlayClick: false, 
           },
           items: [{
@@ -120,21 +112,23 @@ const handlePlaceOrder = async (e) => {
             orderIds: data.orderIds.join(","),
             userId: user.id,
           },
+          // ✅ Callback ko yahan checkout ke andar rakhein
+          eventCallback: (event) => {
+            if (event.name === "checkout.completed" || event.name === "transaction.completed") {
+              setPaymentDone(true);
+            }
+          },
           onCheckoutClosed: () => {
-            // ✅ Jab user modal close karega
-            // Hum "paymentDone" state check karenge jo useEffect ne set ki hogi
-            setPaymentDone((isPaid) => {
-              if (isPaid) {
-                dispatch(fetchCart({ getToken })); // Cart khali
-                window.location.href = "/orders"; // Redirect
-              } else {
-                toast.info("Payment not completed. Cart is safe.");
-              }
-              return isPaid;
-            });
+            // ✅ Yahan direct state check karein
+            if (paymentDone) {
+              dispatch(fetchCart({ getToken }));
+              window.location.href = "/orders";
+            } else {
+              toast.info("Payment not completed. Items are still in cart.");
+            }
           }
         });
-      } else {
+      }else {
         // COD Flow
         dispatch(fetchCart({ getToken }));
         router.push("/orders");
