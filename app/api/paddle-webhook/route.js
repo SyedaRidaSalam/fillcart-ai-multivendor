@@ -7,7 +7,7 @@ export async function POST(req) {
   try {
     const body = await req.json();
 
-    // Paddle se data nikalna
+    // Paddle se data nikalna 
     const eventType = body.event_type;
     const customData = body.data.custom_data;
 

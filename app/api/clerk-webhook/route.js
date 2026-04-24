@@ -35,7 +35,7 @@
 //   try {
 //     evt = wh.verify(body, {
 //       "svix-id": svix_id,
-//       "svix-timestamp": svix_timestamp,
+//       "svix-timestamp": svix_timestamp, 
 //       "svix-signature": svix_signature,
 //     });
 //   } catch (err) {

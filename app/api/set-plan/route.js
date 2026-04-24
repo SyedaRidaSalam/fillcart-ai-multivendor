@@ -27,7 +27,7 @@ export async function POST(req) {
 
     await prisma.user.update({
       where: { id: userId },
-      data: { plan: "plus" },
+      data: { plan: "plus" }, 
     });
 
     return NextResponse.json({ message: "Success! Upgraded to plus" });

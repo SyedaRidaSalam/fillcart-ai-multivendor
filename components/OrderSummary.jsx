@@ -67,7 +67,7 @@ const OrderSummary = ({ totalPrice, items }) => {
       toast.success("Coupon applied!");
     } catch (error) {
       toast.error(error.response?.data?.error || error.message);
-    }
+    } 
   };
 
   const handlePlaceOrder = async (e) => {
