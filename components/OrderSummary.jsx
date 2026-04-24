@@ -18,6 +18,7 @@ const OrderSummary = ({ totalPrice, items }) => {
   const dispatch = useDispatch();
 
   const addressList = useSelector((state) => state.address.list);
+
   const [paymentMethod, setPaymentMethod] = useState("COD");
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [showAddressModal, setShowAddressModal] = useState(false);
@@ -26,7 +27,6 @@ const OrderSummary = ({ totalPrice, items }) => {
   const [paddle, setPaddle] = useState(null);
   const [dbPlan, setDbPlan] = useState("free");
 
-  // ✅ Track payment status without re-rendering
   const isPaid = useRef(false);
 
   useEffect(() => {
@@ -57,8 +57,8 @@ const OrderSummary = ({ totalPrice, items }) => {
 
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
-    if (!user) return toast.error("Please login");
-    if (!selectedAddress) return toast.error("Please select address");
+    if (!user) return toast.error("Please login to place an order");
+    if (!selectedAddress) return toast.error("Please select an address");
 
     try {
       const token = await getToken();
@@ -69,13 +69,13 @@ const OrderSummary = ({ totalPrice, items }) => {
         couponCode: coupon?.code || null,
       };
 
-      // 1. Order create backend pe
+      // 1. Order Register Karein
       const { data } = await axios.post("/api/orders", orderData, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (paymentMethod === "PADDLE" && paddle) {
-        isPaid.current = false; // Reset before opening
+        isPaid.current = false; 
 
         paddle.Checkout.open({
           settings: { displayMode: "overlay", theme: "light" },
@@ -88,42 +88,37 @@ const OrderSummary = ({ totalPrice, items }) => {
             userId: user.id,
           },
           eventCallback: async (event) => {
-            // ✅ Check for success events
+            // ✅ Payment Success Check
             if (event.name === "checkout.completed" || event.name === "transaction.completed") {
-              isPaid.current = true; 
-              console.log("Payment Confirmed in Callback");
-              
-              // Immediate action
+              isPaid.current = true;
               await dispatch(fetchCart({ getToken }));
               router.push("/orders");
             }
           },
           onCheckoutClosed: async () => {
-            // ✅ Sirf tab refresh/redirect karein agar payment confirm hui ho
+            // ✅ Sirf success pe refresh, warna user Summary page par hi rahega
             if (isPaid.current) {
               await dispatch(fetchCart({ getToken }));
               router.push("/orders");
               router.refresh();
-            } else {
-              toast.error("Payment was not completed.");
             }
           },
         });
       } else {
-        // COD Flow
+        // ✅ COD FLOW
         await dispatch(fetchCart({ getToken }));
         router.push("/orders");
-        toast.success("Order Placed! 🎉");
+        toast.success("Order registered successfully! 🎉");
       }
     } catch (error) {
-      toast.error(error.response?.data?.error || "Order failed");
+      toast.error(error.response?.data?.error || "Failed to place order.");
     }
   };
 
   return (
     <div className="w-full max-w-lg lg:max-w-[340px] bg-slate-50/30 border border-slate-200 text-slate-500 text-sm rounded-xl p-7">
       <h2 className="text-xl font-medium text-slate-600">Payment Summary</h2>
-      
+
       <div className="mt-2">
         <span className={`px-2 py-1 rounded-full text-[10px] ${isPlus ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
           Plan: {dbPlan.toUpperCase()}
@@ -131,22 +126,23 @@ const OrderSummary = ({ totalPrice, items }) => {
       </div>
 
       <p className="text-slate-400 text-xs my-4">Payment Method</p>
-      <div className="space-y-2">
-        <div className="flex gap-2 items-center">
-          <input type="radio" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} />
-          <label>Cash on Delivery (COD)</label>
-        </div>
-        <div className="flex gap-2 items-center">
-          <input type="radio" checked={paymentMethod === "PADDLE"} onChange={() => setPaymentMethod("PADDLE")} />
-          <label>Online Payment (Paddle)</label>
-        </div>
+      <div className="flex gap-2 items-center">
+        <input type="radio" name="payment" checked={paymentMethod === "COD"} onChange={() => setPaymentMethod("COD")} />
+        <label>Cash on Delivery (COD)</label>
+      </div>
+      <div className="flex gap-2 items-center mt-1">
+        <input type="radio" name="payment" checked={paymentMethod === "PADDLE"} onChange={() => setPaymentMethod("PADDLE")} />
+        <label>Online Payment (Paddle)</label>
       </div>
 
+      {/* ✅ RESTORED FULL ADDRESS DISPLAY */}
       <div className="my-4 py-4 border-y border-slate-200 text-slate-400">
         <p>Address</p>
         {selectedAddress ? (
           <div className="flex gap-2 items-center">
-            <p>{selectedAddress.name}, {selectedAddress.city}</p>
+            <p>
+              {selectedAddress.name}, {selectedAddress.city}, {selectedAddress.state}, {selectedAddress.zip}
+            </p>
             <SquarePenIcon onClick={() => setSelectedAddress(null)} size={18} className="cursor-pointer" />
           </div>
         ) : (
@@ -154,29 +150,35 @@ const OrderSummary = ({ totalPrice, items }) => {
             {addressList.length > 0 && (
               <select className="border p-2 w-full my-3 rounded" onChange={(e) => setSelectedAddress(addressList[e.target.value])}>
                 <option>Select Address</option>
-                {addressList.map((a, i) => <option key={i} value={i}>{a.name}, {a.city}</option>)}
+                {addressList.map((a, i) => (
+                  <option key={i} value={i}>
+                    {a.name}, {a.city}, {a.state}, {a.zip}
+                  </option>
+                ))}
               </select>
             )}
-            <button onClick={() => setShowAddressModal(true)} className="flex items-center gap-1">Add Address <PlusIcon size={18} /></button>
+            <button onClick={() => setShowAddressModal(true)} className="flex items-center gap-1">
+              Add Address <PlusIcon size={18} />
+            </button>
           </div>
         )}
       </div>
 
-      <div className="pb-4 border-b space-y-1">
+      <div className="pb-4 border-b">
         <div className="flex justify-between">
-          <span>Subtotal:</span>
-          <span className="font-medium">{currency}{Number(totalPrice).toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span>Shipping:</span>
-          <span className={isPlus ? "text-green-600" : "font-medium"}>{isPlus ? "FREE" : `${currency}${shippingFee.toFixed(2)}`}</span>
-        </div>
-        {coupon && (
-          <div className="flex justify-between text-red-500">
-            <span>Coupon ({coupon.code}):</span>
-            <span>-{currency}{discountAmount.toFixed(2)}</span>
+          <div className="text-slate-400">
+            <p>Subtotal:</p>
+            <p>Shipping:</p>
+            {coupon && <p>Coupon ({coupon.code}):</p>}
           </div>
-        )}
+          <div className="text-right font-medium">
+            <p>{currency}{Number(totalPrice).toFixed(2)}</p>
+            <p className={isPlus ? "text-green-600" : ""}>
+              {isPlus ? "FREE" : `${currency}${shippingFee.toFixed(2)}`}
+            </p>
+            {coupon && <p className="text-red-500">-{currency}{discountAmount.toFixed(2)}</p>}
+          </div>
+        </div>
       </div>
 
       <div className="flex justify-between py-4 text-lg">
