@@ -24,6 +24,7 @@ const OrderSummary = ({ totalPrice, items }) => {
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [couponCodeInput, setCouponCodeInput] = useState("");
   const [coupon, setCoupon] = useState("");
+  const [paymentDone, setPaymentDone] = useState(false);
   const [paddle, setPaddle] = useState(null);
 
   // ✅ New State for fresh plan from DB
@@ -67,20 +68,23 @@ const OrderSummary = ({ totalPrice, items }) => {
     }
   };
 
-  useEffect(() => {
-    initializePaddle({
-      environment: "sandbox",
-      token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
-    }).then((instance) => setPaddle(instance));
-  }, []);
+ useEffect(() => {
+  initializePaddle({
+    environment: "sandbox",
+    token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
+    eventCallback: (event) => {
+      // ✅ Payment confirm hote hi state update karein
+      if (event.name === "checkout.completed" || event.name === "transaction.completed") {
+        setPaymentDone(true);
+      }
+    }
+  }).then((instance) => setPaddle(instance));
+}, []);
 
-
-
+// 3. Main handlePlaceOrder Function
 const handlePlaceOrder = async (e) => {
   e.preventDefault();
-  
-  // Ek local variable banayein jo sirf is function execution tak rahe
-  let paymentSuccessful = false;
+  setPaymentDone(false); // Reset on every new click
 
   try {
     if (!user) return toast.error("Please login to place an order");
@@ -100,43 +104,36 @@ const handlePlaceOrder = async (e) => {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (paymentMethod === "PADDLE") {
-        if (paddle) {
-          paddle.Checkout.open({
-            settings: {
-              displayMode: "overlay",
-              theme: "light",
-            },
-            items: [{
-              priceId: "pri_01kpy9dt32f9ezc1wdnznhdhdk",
-              quantity: Math.round(finalTotal),
-            }],
-            customData: {
-              orderIds: data.orderIds.join(","),
-              userId: user.id,
-            },
-            eventCallback: (event) => {
-              // ✅ Sirf payment confirm hone par flag true karein
-              if (event.name === "checkout.completed" || event.name === "transaction.completed") {
-                paymentSuccessful = true;
-                toast.success("Payment Successful! Processing your order...");
-              }
-            },
-            onCheckoutClosed: () => {
-              // ✅ Jab user MODAL CLOSE kare (Cross click kare)
-              if (paymentSuccessful) {
-                // 1. Ab cart khali karein kyunki payment ho chuki hai
-                dispatch(fetchCart({ getToken }));
-                // 2. My Orders page par bhej dein
-                window.location.href = "/orders";
+      if (paymentMethod === "PADDLE" && paddle) {
+        paddle.Checkout.open({
+          settings: {
+            displayMode: "overlay",
+            theme: "light",
+            // ✅ Ye line bahar click karne se modal band nahi hone degi
+            closeOnOverlayClick: false, 
+          },
+          items: [{
+            priceId: "pri_01kpy9dt32f9ezc1wdnznhdhdk",
+            quantity: Math.round(finalTotal),
+          }],
+          customData: {
+            orderIds: data.orderIds.join(","),
+            userId: user.id,
+          },
+          onCheckoutClosed: () => {
+            // ✅ Jab user modal close karega
+            // Hum "paymentDone" state check karenge jo useEffect ne set ki hogi
+            setPaymentDone((isPaid) => {
+              if (isPaid) {
+                dispatch(fetchCart({ getToken })); // Cart khali
+                window.location.href = "/orders"; // Redirect
               } else {
-                // Agar payment nahi hui aur user ne close kiya, toh kuch nahi hoga
-                // Cart waisa hi bhara rahega.
-                toast.info("Payment cancelled. Your items are still in the cart.");
+                toast.info("Payment not completed. Cart is safe.");
               }
-            }
-          });
-        }
+              return isPaid;
+            });
+          }
+        });
       } else {
         // COD Flow
         dispatch(fetchCart({ getToken }));
@@ -155,7 +152,6 @@ const handlePlaceOrder = async (e) => {
     toast.error(error.message);
   }
 };
-
   return (
     <div className="w-full max-w-lg lg:max-w-[340px] bg-slate-50/30 border border-slate-200 text-slate-500 text-sm rounded-xl p-7">
       <h2 className="text-xl font-medium text-slate-600">Payment Summary</h2>
