@@ -56,7 +56,7 @@ const OrderSummary = ({ totalPrice, items }) => {
     }).then((instance) => setPaddle(instance));
   }, []);
 
-  const handlePlaceOrder = async (e) => {
+const handlePlaceOrder = async (e) => {
     e.preventDefault();
     if (!user) return toast.error("Please login to place an order");
     if (!selectedAddress) return toast.error("Please select an address");
@@ -82,7 +82,6 @@ const OrderSummary = ({ totalPrice, items }) => {
           settings: { 
             displayMode: "overlay", 
             theme: "light",
-            // ✅ SUCCESS URL: Paddle payment ke baad is par bhejega, wahan se cart empty ho jayega automatically
             successUrl: window.location.origin + "/orders"
           },
           items: [{
@@ -95,15 +94,15 @@ const OrderSummary = ({ totalPrice, items }) => {
           },
           eventCallback: async (event) => {
             console.log("Paddle Event:", event.name);
-            // ✅ Agar event mil gaya toh cart foran refresh
             if (event.name === "checkout.completed" || event.name === "transaction.completed") {
+              // ✅ Success Toast for Paddle
+              toast.success("Order placed successfully! 🥳 Hurray!", { duration: 5000 });
+              
               await dispatch(fetchCart({ getToken }));
               router.push("/orders");
             }
           },
           onCheckoutClosed: async () => {
-            // ✅ LAST RESORT: Agar user ne window band ki aur checkout open hua tha, 
-            // toh cart refresh maaro taake "empty" dikhe kyunki order already backend pe ban chuka hai.
             if (checkoutOpened.current) {
               await dispatch(fetchCart({ getToken }));
               router.push("/orders");
@@ -112,10 +111,13 @@ const OrderSummary = ({ totalPrice, items }) => {
           },
         });
       } else {
-        // ✅ COD Flow (Working Fine)
+        // ✅ COD Flow
         await dispatch(fetchCart({ getToken }));
+        
+        // ✅ Success Toast for COD
+        toast.success("Order placed successfully! 🥳 Hurray!", { duration: 5000 });
+        
         router.push("/orders");
-        toast.success("Order registered successfully! 🎉");
       }
     } catch (error) {
       toast.error(error.response?.data?.error || "Failed to place order.");
