@@ -24,7 +24,6 @@ const OrderSummary = ({ totalPrice, items }) => {
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [couponCodeInput, setCouponCodeInput] = useState("");
   const [coupon, setCoupon] = useState("");
-  const [paymentDone, setPaymentDone] = useState(false);
   const [paddle, setPaddle] = useState(null);
 
   // ✅ New State for fresh plan from DB
@@ -67,17 +66,21 @@ const OrderSummary = ({ totalPrice, items }) => {
       toast.error(error.response?.data?.error || error.message);
     }
   };
-useEffect(() => {
-  initializePaddle({
-    environment: "sandbox",
-    token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
-  }).then((instance) => setPaddle(instance));
-}, []);
 
-// 3. Main handlePlaceOrder Function
+  useEffect(() => {
+    initializePaddle({
+      environment: "sandbox",
+      token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
+    }).then((instance) => setPaddle(instance));
+  }, []);
+
+
+
 const handlePlaceOrder = async (e) => {
   e.preventDefault();
-  setPaymentDone(false); // Reset on every new click
+  
+  // Ek local variable banayein jo sirf is function execution tak rahe
+  let paymentSuccessful = false;
 
   try {
     if (!user) return toast.error("Please login to place an order");
@@ -97,38 +100,44 @@ const handlePlaceOrder = async (e) => {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-     if (paymentMethod === "PADDLE" && paddle) {
-        paddle.Checkout.open({
-          settings: {
-            displayMode: "overlay",
-            theme: "light",
-            closeOnOverlayClick: false, 
-          },
-          items: [{
-            priceId: "pri_01kpy9dt32f9ezc1wdnznhdhdk",
-            quantity: Math.round(finalTotal),
-          }],
-          customData: {
-            orderIds: data.orderIds.join(","),
-            userId: user.id,
-          },
-          // ✅ Callback ko yahan checkout ke andar rakhein
-          eventCallback: (event) => {
-            if (event.name === "checkout.completed" || event.name === "transaction.completed") {
-              setPaymentDone(true);
+      if (paymentMethod === "PADDLE") {
+        if (paddle) {
+          paddle.Checkout.open({
+            settings: {
+              displayMode: "overlay",
+              theme: "light",
+            },
+            items: [{
+              priceId: "pri_01kpy9dt32f9ezc1wdnznhdhdk",
+              quantity: Math.round(finalTotal),
+            }],
+            customData: {
+              orderIds: data.orderIds.join(","),
+              userId: user.id,
+            },
+            eventCallback: (event) => {
+              // ✅ Sirf payment confirm hone par flag true karein
+              if (event.name === "checkout.completed" || event.name === "transaction.completed") {
+                paymentSuccessful = true;
+                toast.success("Payment Successful! Processing your order...");
+              }
+            },
+            onCheckoutClosed: () => {
+              // ✅ Jab user MODAL CLOSE kare (Cross click kare)
+              if (paymentSuccessful) {
+                // 1. Ab cart khali karein kyunki payment ho chuki hai
+                dispatch(fetchCart({ getToken }));
+                // 2. My Orders page par bhej dein
+                window.location.href = "/orders";
+              } else {
+                // Agar payment nahi hui aur user ne close kiya, toh kuch nahi hoga
+                // Cart waisa hi bhara rahega.
+                toast.info("Payment cancelled. Your items are still in the cart.");
+              }
             }
-          },
-          onCheckoutClosed: () => {
-            // ✅ Yahan direct state check karein
-            if (paymentDone) {
-              dispatch(fetchCart({ getToken }));
-              window.location.href = "/orders";
-            } else {
-              toast.info("Payment not completed. Items are still in cart.");
-            }
-          }
-        });
-      }else {
+          });
+        }
+      } else {
         // COD Flow
         dispatch(fetchCart({ getToken }));
         router.push("/orders");
@@ -146,6 +155,7 @@ const handlePlaceOrder = async (e) => {
     toast.error(error.message);
   }
 };
+
   return (
     <div className="w-full max-w-lg lg:max-w-[340px] bg-slate-50/30 border border-slate-200 text-slate-500 text-sm rounded-xl p-7">
       <h2 className="text-xl font-medium text-slate-600">Payment Summary</h2>
