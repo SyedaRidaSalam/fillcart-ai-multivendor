@@ -74,14 +74,6 @@ const OrderSummary = ({ totalPrice, items }) => {
     }).then((instance) => setPaddle(instance));
   }, []);
 
-  // ✅ Paddle Initialize (Design par zero effect)
-  useEffect(() => {
-    initializePaddle({
-      environment: "sandbox",
-      token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
-    }).then((instance) => setPaddle(instance));
-  }, []);
-
 
 
 const handlePlaceOrder = async (e) => {
