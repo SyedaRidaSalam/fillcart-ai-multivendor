@@ -1,7 +1,7 @@
 "use client";
 
 import { PlusIcon, SquarePenIcon, XIcon } from "lucide-react";
-import React, { useState, useEffect, useRef} from "react";
+import React, { useState, useEffect, useRef } from "react";
 import AddressModal from "./AddressModal";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
@@ -75,107 +75,100 @@ const OrderSummary = ({ totalPrice, items }) => {
       token: process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN,
     }).then((instance) => setPaddle(instance));
   }, []);
+
   useEffect(() => {
-  const url = new URL(window.location.href);
+    const url = new URL(window.location.href);
+    const paymentSuccess = url.searchParams.get("payment");
 
-  // agar tum custom param bhejo ya future me add karo
-  const paymentSuccess = url.searchParams.get("payment");
+    if (paymentSuccess === "success") {
+      (async () => {
+        await dispatch(fetchCart({ getToken }));
+        router.push("/orders");
+      })();
+    }
+  }, []);
 
-  if (paymentSuccess === "success") {
-    (async () => {
-      await dispatch(fetchCart({ getToken }));
-      router.push("/orders");
-    })();
-  }
-}, []);
+  const handlePlaceOrder = async (e) => {
+    e.preventDefault();
 
+    try {
+      if (!user) return toast.error("Please login to place an order");
+      if (!selectedAddress) return toast.error("Please select an address");
 
+      const placeOrderPromise = async () => {
+        const token = await getToken();
+        const orderData = {
+          addressId: selectedAddress.id,
+          items,
+          paymentMethod,
+        };
 
-const handlePlaceOrder = async (e) => {
-  e.preventDefault();
-  
+        if (coupon) orderData.couponCode = coupon.code;
 
-  try {
-    if (!user) return toast.error("Please login to place an order");
-    if (!selectedAddress) return toast.error("Please select an address");
+        const { data } = await axios.post("/api/orders", orderData, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
-    const placeOrderPromise = async () => {
-      const token = await getToken();
-      const orderData = {
-        addressId: selectedAddress.id,
-        items,
-        paymentMethod,
+        if (paymentMethod === "PADDLE") {
+          if (paddle) {
+            paddle.Checkout.open({
+              settings: {
+                displayMode: "overlay",
+                theme: "light",
+              },
+              items: [
+                {
+                  priceId: "pri_01kpy9dt32f9ezc1wdnznhdhdk",
+                  quantity: Math.round(finalTotal),
+                },
+              ],
+              customData: {
+                orderIds: data.orderIds.join(","),
+                userId: user.id,
+              },
+              eventCallback: async (event) => {
+                // ✅ Cart ko foran update karein jab transaction complete ho
+                if (
+                  event.name === "checkout.completed" ||
+                  event.name === "transaction.completed"
+                ) {
+                  paymentSuccessfulRef.current = true;
+                  await dispatch(fetchCart({ getToken }));
+                  // Modal ke piche hi redirect queue kar dein
+                  router.push("/orders");
+                }
+              },
+              onCheckoutClosed: () => {
+                // ✅ Agar payment success thi, toh foran redirect (no timeout)
+                if (paymentSuccessfulRef.current) {
+                  router.push("/orders");
+                }
+              },
+            });
+          }
+        } else {
+          // COD Flow
+          await dispatch(fetchCart({ getToken }));
+          router.push("/orders");
+        }
+        return { data, method: paymentMethod };
       };
 
-      if (coupon) orderData.couponCode = coupon.code;
-
-      const { data } = await axios.post("/api/orders", orderData, {
-        headers: { Authorization: `Bearer ${token}` },
+      toast.promise(placeOrderPromise(), {
+        loading: "Placing your order...",
+        success: (res) =>
+          res.method === "COD" ? "Order registered successfully! 🎉" : "Redirecting to payment...",
+        error: (err) => err.response?.data?.error || "Failed to place order.",
       });
-
-      if (paymentMethod === "PADDLE") {
-        if (paddle) {
-          paddle.Checkout.open({
-            settings: {
-              displayMode: "overlay",
-              theme: "light",
-            },
-            items: [{
-              priceId: "pri_01kpy9dt32f9ezc1wdnznhdhdk",
-              quantity: Math.round(finalTotal),
-            }],
-            customData: {
-              orderIds: data.orderIds.join(","),
-              userId: user.id,
-            },
-eventCallback: (event) => {
-  console.log("Paddle Event:", event.name); // 👈 debug
-
-  if (
-    event.name === "checkout.completed" ||
-    event.name === "transaction.completed"
-  ) {
-    paymentSuccessfulRef.current = true;
-  }
-},
-
-onCheckoutClosed: async () => {
-  setTimeout(async () => {
-
-    // 🔥 ALWAYS run (no dependency on event)
-    await dispatch(fetchCart({ getToken }));
-
-    // 🔥 force refresh + redirect
-    window.location.href = "/orders";
-
-  }, 1000);
-},
-          });
-        }
-      } else {
-        // COD Flow
-        dispatch(fetchCart({ getToken }));
-        router.push("/orders");
-      }
-      return { data, method: paymentMethod };
-    };
-
-    toast.promise(placeOrderPromise(), {
-      loading: "Placing your order...",
-      success: (res) => (res.method === "COD" ? "Order registered successfully! 🎉" : null),
-      error: (err) => err.response?.data?.error || "Failed to place order.",
-    });
-
-  } catch (error) {
-    toast.error(error.message);
-  }
-};
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
 
   return (
     <div className="w-full max-w-lg lg:max-w-[340px] bg-slate-50/30 border border-slate-200 text-slate-500 text-sm rounded-xl p-7">
       <h2 className="text-xl font-medium text-slate-600">Payment Summary</h2>
 
-      {/* Plan Badge for Debugging (Optional) */}
       <div className="mt-2">
         <span
           className={`px-2 py-1 rounded-full text-[10px] ${isPlus ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}
@@ -184,7 +177,6 @@ onCheckoutClosed: async () => {
         </span>
       </div>
 
-      {/* PAYMENT METHOD SECTION */}
       <p className="text-slate-400 text-xs my-4">Payment Method</p>
       <div className="flex gap-2 items-center">
         <input
@@ -201,13 +193,12 @@ onCheckoutClosed: async () => {
           className="cursor-pointer"
           type="radio"
           name="payment"
-          checked={paymentMethod === "PADDLE"} // "STRIPE" ko "PADDLE" se badal diya
+          checked={paymentMethod === "PADDLE"}
           onChange={() => setPaymentMethod("PADDLE")}
         />
         <label>Online Payment (Paddle)</label>
       </div>
 
-      {/* ADDRESS SECTION */}
       <div className="my-4 py-4 border-y border-slate-200 text-slate-400">
         <p>Address</p>
         {selectedAddress ? (
@@ -249,7 +240,6 @@ onCheckoutClosed: async () => {
         )}
       </div>
 
-      {/* SUMMARY DETAILS */}
       <div className="pb-4 border-b">
         <div className="flex justify-between">
           <div className="text-slate-400">
@@ -260,7 +250,7 @@ onCheckoutClosed: async () => {
           <div className="text-right font-medium">
             <p>
               {currency}
-              {Number(totalPrice).toFixed(2)} {/* Fixed decimal here */}
+              {Number(totalPrice).toFixed(2)}
             </p>
             <p className={isPlus ? "text-green-600" : ""}>
               {isPlus ? "FREE" : `${currency}${shippingFee.toFixed(2)}`}
@@ -275,7 +265,6 @@ onCheckoutClosed: async () => {
         </div>
       </div>
 
-      {/* COUPON INPUT */}
       {!coupon ? (
         <form
           onSubmit={(e) =>
@@ -307,13 +296,11 @@ onCheckoutClosed: async () => {
         </div>
       )}
 
-      {/* FINAL TOTAL */}
       <div className="flex justify-between py-4 text-lg">
         <p className="text-slate-600 font-bold">Total:</p>
         <p className="font-bold text-slate-800">
           {currency}
-          {finalTotal.toFixed(2)}{" "}
-          {/* Already had toFixed, but ensure it stays */}
+          {finalTotal.toFixed(2)}
         </p>
       </div>
 
